@@ -1,2 +1,2 @@
-# Sports-Inventory
-Sports Inventory Literally
+# Ashoka University Sports Inventory Borrowing System
+wip
