@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Landing Page</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style/landing.css" />
+  </head>
+
+  <body>
+    <%- include("nav",{ activePage: "landing" }) %>
+    <div class="box">
+      <div class="up">
+        <h1 class="details">
+          <p><%= student.name %></p>
+          <p><%= student.AshokaId %></p>
+        </h1>
+        <h1>Pending Equipment Borrowed</h1>
+        <h1 class="fake">H</h1>
+      </div>
+
+      <% if (equipment.length === 0) { %>
+      <p class="noPendingEquipment">No pending equipment</p>
+      <% } else { %>
+      <table border="1" cellpadding="5">
+        <thead>
+          <tr>
+            <th>Equipment</th>
+            <th>Quantity Borrowed</th>
+            <th>Checkout Time</th>
+            <th>Return</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% equipment.forEach(function(item) { %>
+          <tr>
+            <td><%= item.equipment %></td>
+            <td><%= item.outNum %></td>
+            <td><%= item.outTime %></td>
+            <td>
+              <div class="checkbox">
+                <input
+                  class="equipment-checkbox"
+                  type="checkbox"
+                  value="<%= item.equipment %>"
+                />
+                <span class="checkmark"></span>
+              </div>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+
+      <br />
+      <% } %>
+
+      <div class="bottom">
+        <p>Technology Ministry of Ashoka</p>
+        <% if (equipment.length != 0) { %>
+        <p class="noPendingEquipment">
+          <button id="returnSelectedBtn">Return Selected</button>
+        </p>
+        <% }%>
+      </div>
+    </div>
+
+    <!-- ✅ Script for multiple return without form -->
+    <script>
+      document
+        .getElementById("returnSelectedBtn")
+        ?.addEventListener("click", async () => {
+          // Collect selected equipment names
+          const selected = Array.from(
+            document.querySelectorAll(".equipment-checkbox:checked")
+          ).map((cb) => cb.value);
+
+          if (selected.length === 0) {
+            alert("Please select at least one item to return.");
+            return;
+          }
+
+          try {
+            const res = await fetch("/returnMany", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ equipments: selected }),
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+              window.location.reload();
+            } else {
+              alert("Error: " + data.error);
+            }
+          } catch (err) {
+            alert("Network error: " + err.message);
+          }
+        });
+    </script>
+  </body>
+</html>

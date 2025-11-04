@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>issue</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style/issue.css" />
+  </head>
+  <body>
+    <%- include("nav",{ activePage: "issue" }) %>
+    <div class="box">
+      <div class="up">
+        <h1 class="details">
+          <p><%= student.name %></p>
+          <p><%= student.AshokaId %></p>
+        </h1>
+        <h1>Issue Equipment</h1>
+        <h1 class="fake">H</h1>
+      </div>
+      <form action="/issue" method="POST">
+        <div class="card">
+          <img src="/images/badminton racquet.jpeg" alt="" />
+
+          <label for="Badminton Racquet">Badminton Racquet</label>
+          <p class="availability">
+            Available: <%= availableItems["Badminton Racquet"] %>
+          </p>
+          <div class="something">
+            <button type="button" class="decrement">-</button>
+            <input
+              type="number"
+              name="quantity[Badminton Racquet]"
+              value="0"
+              min="0"
+              step="1"
+            />
+            <button type="button" class="increment">+</button>
+          </div>
+        </div>
+        <div class="card">
+          <img src="/images/TT Racquet.jpg" alt="" />
+
+          <label for="Table Tennis Racquet">Table Tennis Racquet</label>
+          <p class="availability">
+            Available: <%= availableItems["Table Tennis Racquet"] %>
+          </p>
+          <div class="something">
+            <button type="button" class="decrement">-</button>
+            <input
+              type="number"
+              name="quantity[Table Tennis Racquet]"
+              value="0"
+              min="0"
+              step="1"
+            />
+            <button type="button" class="increment">+</button>
+          </div>
+        </div>
+        <div class="card">
+          <img src="/images/squash racquet.jpg" alt="" />
+
+          <label for="Squash Racquet">Squash Racquet</label>
+          <p class="availability">
+            Available: <%= availableItems["Squash Racquet"] %>
+          </p>
+          <div class="something">
+            <button type="button" class="decrement">-</button>
+            <input
+              type="number"
+              name="quantity[Squash Racquet]"
+              value="0"
+              min="0"
+              step="1"
+            />
+            <button type="button" class="increment">+</button>
+          </div>
+        </div>
+        <div class="card">
+          <img src="/images/tennis racquet.webp" alt="" />
+
+          <label for="Tennis Racquet">Tennis Racquet </label>
+          <p class="availability">
+            Available: <%= availableItems["Tennis Racquet"] %>
+          </p>
+          <div class="something">
+            <button type="button" class="decrement">-</button>
+            <input
+              type="number"
+              name="quantity[Tennis Racquet]"
+              value="0"
+              min="0"
+              step="1"
+            />
+            <button type="button" class="increment">+</button>
+          </div>
+        </div>
+        <div class="card">
+          <img src="/images/pickleball.jpg" alt="" />
+          <label for="Pickleball Racquet">Pickleball Racquet</label>
+          <p class="availability">
+            Available: <%= availableItems["Pickleball Racquet"] %>
+          </p>
+          <div class="something">
+            <button type="button" class="decrement">-</button>
+            <input
+              type="number"
+              name="quantity[Pickleball Racquet]"
+              value="0"
+              min="0"
+              step="1"
+            />
+            <button type="button" class="increment">+</button>
+          </div>
+        </div>
+        <div class="card">
+          <img src="/images/pool stick.webp" alt="" />
+          <label for="Pool Stick">Pool Stick</label>
+          <p class="availability">
+            Available: <%= availableItems["Pool Stick"] %>
+          </p>
+          <div class="something">
+            <button type="button" class="decrement">-</button>
+            <input
+              type="number"
+              name="quantity[Pool Stick]"
+              value="0"
+              min="0"
+              step="1"
+            />
+            <button type="button" class="increment">+</button>
+          </div>
+        </div>
+        <div class="card">
+          <img src="/images/cycle.jpg" alt="" />
+          <label for="Cycle">Cycle</label>
+          <p class="availability">Available: <%= availableItems["Cycle"] %></p>
+          <div class="something">
+            <button type="button" class="decrement">-</button>
+            <input
+              type="number"
+              name="quantity[Cycle]"
+              value="0"
+              min="0"
+              step="1"
+            />
+            <button type="button" class="increment">+</button>
+          </div>
+        </div>
+        <div class="card">
+          <img src="/images/football.jpeg" alt="" />
+          <label for="Football">Football</label>
+          <p class="availability">
+            Available: <%= availableItems["Football"] %>
+          </p>
+          <div class="something">
+            <button type="button" class="decrement">-</button>
+            <input
+              type="number"
+              name="quantity[Football]"
+              value="0"
+              min="0"
+              step="1"
+            />
+            <button type="button" class="increment">+</button>
+          </div>
+        </div>
+
+        <br />
+        <div class="bottom">
+          <p>Sports Inventory Management</p>
+          <button type="submit">Submit</button>
+        </div>
+      </form>
+    </div>
+
+    <script>
+      document.querySelectorAll(".card").forEach((card) => {
+        const availabilityText =
+          card.querySelector(".availability").textContent;
+        const availableMatch = availabilityText.match(/(\d+)/);
+        const available = availableMatch ? parseInt(availableMatch[1]) : 0;
+        const input = card.querySelector("input[type=number]");
+        const incBtn = card.querySelector(".increment");
+        const decBtn = card.querySelector(".decrement");
+        if (available === 0) {
+          incBtn.disabled = true;
+          input.disabled = true;
+          card.style.opacity = "0.6";
+        }
+        incBtn.addEventListener("click", function () {
+          const val = parseInt(input.value) || 0;
+          if (val < available) input.value = val + 1;
+        });
+        decBtn.addEventListener("click", function () {
+          const val = parseInt(input.value) || 0;
+          input.value = Math.max(0, val - 1);
+        });
+      });
+    </script>
+  </body>
+</html>

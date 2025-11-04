@@ -1,0 +1,17 @@
+:root {
+  --primary-color: #c4122f;
+  --secondary-color: #0d3862;
+  --off-white: #faf6e3;
+  --text-color: #333;
+  --text-color-secondary: white;
+}
+body {
+  background-color: var(--off-white);
+  font-family: "nunitio", sans-serif;
+}
+.box {
+  background-color: var(--secondary-color);
+  color: var(--text-color-secondary);
+  width: 80%;
+  padding: 20px;
+}

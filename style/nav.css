@@ -1,0 +1,38 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: "nunitio", sans-serif;
+}
+nav {
+  background-color: #c4122f;
+  overflow: hidden;
+  display: flex;
+  justify-content: space-between;
+  height: 100px;
+  align-items: center;
+}
+nav p {
+  font-size: 30px;
+  color: white;
+  margin-left: 40px;
+}
+.pages {
+  margin-right: 20px;
+}
+nav a {
+  color: white;
+  padding: 5px;
+  text-align: center;
+  text-decoration: none;
+  font-size: 17px;
+}
+nav a:visited {
+  color: white;
+  text-decoration: none;
+}
+.pages a.active {
+  color: #fff;
+  font-weight: bold;
+  border-bottom: 2px solid #fff;
+}
