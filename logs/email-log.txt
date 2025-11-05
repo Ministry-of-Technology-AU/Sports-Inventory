@@ -16,3 +16,112 @@
 [2025-11-04T21:49:01.897Z] 🔍 Checking for LATE borrowers to email...
 [2025-11-04T21:49:01.901Z]    ℹ️ No LATE records found
 [2025-11-04T21:49:01.901Z] ✅ Initial check complete
+<<<<<<< Updated upstream
+=======
+[2025-11-05T13:34:43.823Z] ⚠️ OAuth2 configuration incomplete and EMAIL_PASS not provided. Mailer will fail until configured.
+[2025-11-05T13:34:43.830Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:34:59.927Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:35:23.291Z] ❌ Failed to send BORROW email to 28nitin07@gmail.com: invalid_grant: Token has been expired or revoked.
+[2025-11-05T13:39:39.615Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:39:53.985Z] 📧 RETURN sent to Atharvajeet Singh <28nitin07@gmail.com>
+[2025-11-05T13:40:16.146Z] 📧 RETURN sent to Atharvajeet Singh <28nitin07@gmail.com>
+[2025-11-05T13:41:57.208Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:41:57.209Z] 🔍 Loaded 4 students from students.json
+[2025-11-05T13:41:57.213Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:41:57.240Z] 🚀 Mailer service started on port 3001
+[2025-11-05T13:41:57.240Z] 📅 Cron: Overdue checks every 6 hours (00:00, 06:00, 12:00, 18:00)
+[2025-11-05T13:41:57.240Z] 🔍 Running initial overdue check...
+[2025-11-05T13:41:57.240Z] 🔄 Running overdue updater (PENDING -> LATE)...
+[2025-11-05T13:41:57.254Z]    ✅ Updated 12 record(s) to LATE
+[2025-11-05T13:41:57.254Z] 🔍 Checking for LATE borrowers to email...
+[2025-11-05T13:41:57.256Z]    📋 Found 12 LATE record(s)
+[2025-11-05T13:41:57.256Z] ⚠️ No email found for student 1011; skipping
+[2025-11-05T13:41:57.256Z] ⚠️ No email found for student 1018; skipping
+[2025-11-05T13:41:57.256Z] ⚠️ No email found for student 1026; skipping
+[2025-11-05T13:41:57.256Z] ⚠️ No email found for student 1035; skipping
+[2025-11-05T13:41:57.256Z] ⚠️ No email found for student 1042; skipping
+[2025-11-05T13:41:57.256Z] ⚠️ No email found for student 1049; skipping
+[2025-11-05T13:41:57.256Z] ⚠️ No email found for student 1056; skipping
+[2025-11-05T13:41:57.256Z] ⚠️ No email found for student 1066; skipping
+[2025-11-05T13:41:57.256Z] ⚠️ No email found for student 1072; skipping
+[2025-11-05T13:41:57.257Z] ⚠️ No email found for student 1079; skipping
+[2025-11-05T13:41:57.257Z] ⚠️ No email found for student 1087; skipping
+[2025-11-05T13:41:57.257Z] ⚠️ No email found for student 1097; skipping
+[2025-11-05T13:41:57.257Z] ✅ Initial check complete
+[2025-11-05T13:44:15.459Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:44:15.460Z] 🔍 Loaded 4 students from students.json
+[2025-11-05T13:44:15.465Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:44:15.487Z] 🚀 Mailer service started on port 3001
+[2025-11-05T13:44:15.487Z] 📅 Cron: Overdue checks every 6 hours (00:00, 06:00, 12:00, 18:00)
+[2025-11-05T13:44:15.487Z] 🔍 Running initial overdue check...
+[2025-11-05T13:44:15.487Z] 🔄 Running overdue updater (PENDING -> LATE)...
+[2025-11-05T13:44:15.496Z]    ✅ Updated 0 record(s) to LATE
+[2025-11-05T13:44:15.496Z] 🔍 Checking for LATE borrowers to email...
+[2025-11-05T13:44:15.498Z]    ℹ️ No LATE records found
+[2025-11-05T13:44:15.498Z] ✅ Initial check complete
+[2025-11-05T13:44:42.566Z] 📧 BORROW sent to Atharvajeet Singh <28nitin07@gmail.com>
+[2025-11-05T13:44:51.036Z] 📧 RETURN sent to Atharvajeet Singh <28nitin07@gmail.com>
+[2025-11-05T13:45:01.710Z] 📧 RETURN sent to Atharvajeet Singh <28nitin07@gmail.com>
+[2025-11-05T13:50:48.270Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:50:48.271Z] 🔍 Loaded 4 students from students.json
+[2025-11-05T13:50:48.274Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:50:48.283Z] 🚀 Mailer service started on port 3001
+[2025-11-05T13:50:48.283Z] 📅 Cron: Overdue checks every 6 hours (00:00, 06:00, 12:00, 18:00)
+[2025-11-05T13:50:48.283Z] 🔍 Running initial overdue check...
+[2025-11-05T13:50:48.283Z] 🔄 Running overdue updater (PENDING -> LATE)...
+[2025-11-05T13:50:48.293Z]    ✅ Updated 0 record(s) to LATE
+[2025-11-05T13:50:48.294Z] 🔍 Checking for LATE borrowers to email...
+[2025-11-05T13:50:48.295Z]    ℹ️ No LATE records found
+[2025-11-05T13:50:48.295Z] ✅ Initial check complete
+[2025-11-05T13:53:02.427Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:53:02.428Z] 🔍 Loaded 4 students from students.json
+[2025-11-05T13:53:02.432Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:53:02.442Z] 🚀 Mailer service started on port 3001
+[2025-11-05T13:53:02.442Z] 📅 Cron: Overdue checks every 6 hours (00:00, 06:00, 12:00, 18:00)
+[2025-11-05T13:53:02.442Z] 🔍 Running initial overdue check...
+[2025-11-05T13:53:02.442Z] 🔄 Running overdue updater (PENDING -> LATE)...
+[2025-11-05T13:53:09.229Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:53:09.232Z] 🔍 Loaded 4 students from students.json
+[2025-11-05T13:53:09.244Z] 🚀 Mailer service started on port 3001
+[2025-11-05T13:53:09.244Z] 📅 Cron: Overdue checks every 6 hours (00:00, 06:00, 12:00, 18:00)
+[2025-11-05T13:53:09.244Z] 🔍 Running initial overdue check...
+[2025-11-05T13:53:09.244Z] 🔄 Running overdue updater (PENDING -> LATE)...
+[2025-11-05T13:53:09.248Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:53:09.256Z]    ✅ Updated 0 record(s) to LATE
+[2025-11-05T13:53:09.256Z] 🔍 Checking for LATE borrowers to email...
+[2025-11-05T13:53:09.257Z]    ℹ️ No LATE records found
+[2025-11-05T13:53:09.258Z] ✅ Initial check complete
+[2025-11-05T13:53:17.041Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:53:17.042Z] 🔍 Loaded 4 students from students.json
+[2025-11-05T13:53:17.054Z] 🚀 Mailer service started on port 3001
+[2025-11-05T13:53:17.054Z] 📅 Cron: Overdue checks every 6 hours (00:00, 06:00, 12:00, 18:00)
+[2025-11-05T13:53:17.054Z] 🔍 Running initial overdue check...
+[2025-11-05T13:53:17.054Z] 🔄 Running overdue updater (PENDING -> LATE)...
+[2025-11-05T13:53:17.065Z]    ✅ Updated 0 record(s) to LATE
+[2025-11-05T13:53:17.065Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:53:17.065Z] 🔍 Checking for LATE borrowers to email...
+[2025-11-05T13:53:17.066Z]    ℹ️ No LATE records found
+[2025-11-05T13:53:17.066Z] ✅ Initial check complete
+[2025-11-05T13:53:36.364Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:53:36.365Z] 🔍 Loaded 4 students from students.json
+[2025-11-05T13:53:36.377Z] 🚀 Mailer service started on port 3001
+[2025-11-05T13:53:36.377Z] 📅 Cron: Overdue checks every 6 hours (00:00, 06:00, 12:00, 18:00)
+[2025-11-05T13:53:36.377Z] 🔍 Running initial overdue check...
+[2025-11-05T13:53:36.377Z] 🔄 Running overdue updater (PENDING -> LATE)...
+[2025-11-05T13:53:36.382Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:53:36.387Z]    ✅ Updated 0 record(s) to LATE
+[2025-11-05T13:53:36.387Z] 🔍 Checking for LATE borrowers to email...
+[2025-11-05T13:53:36.388Z]    ℹ️ No LATE records found
+[2025-11-05T13:53:36.388Z] ✅ Initial check complete
+[2025-11-05T13:55:10.143Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:55:10.143Z] 🔍 Loaded 4 students from students.json
+[2025-11-05T13:55:10.155Z] 🚀 Mailer service started on port 3001
+[2025-11-05T13:55:10.155Z] 📅 Cron: Overdue checks every 6 hours (00:00, 06:00, 12:00, 18:00)
+[2025-11-05T13:55:10.155Z] 🔍 Running initial overdue check...
+[2025-11-05T13:55:10.155Z] 🔄 Running overdue updater (PENDING -> LATE)...
+[2025-11-05T13:55:10.160Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-05T13:55:10.165Z]    ✅ Updated 0 record(s) to LATE
+[2025-11-05T13:55:10.165Z] 🔍 Checking for LATE borrowers to email...
+[2025-11-05T13:55:10.166Z]    ℹ️ No LATE records found
+[2025-11-05T13:55:10.166Z] ✅ Initial check complete
+>>>>>>> Stashed changes
