@@ -4,3 +4,4 @@
 .env.test.local
 .env.production.local
 logs/email-log.txt
+credentials.json
