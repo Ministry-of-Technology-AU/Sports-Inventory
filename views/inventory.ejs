@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inventory Management</title>
+
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100 min-h-screen flex flex-col items-center p-8">
+
+    
+    <h1 class="text-3xl font-bold text-gray-800 mb-8">Sports Inventory Management</h1>
+
+    
+    <form action="/inventory/add" method="POST" class="bg-white shadow-md rounded-lg p-6 w-full max-w-4xl mb-8">
+      <h2 class="text-xl font-semibold text-gray-700 mb-4">Add New Equipment</h2>
+
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+
+        <select name="equipmentId" required class="border border-gray-300 rounded-lg px-1 py-2 focus:ring focus:ring-blue-200">
+          <option value="" disabled selected>Select Equipment</option>
+          <% for (const [id, name] of Object.entries(equipmentMap)) { %>
+            <option value="<%= id %>"><%= name %></option>
+          <% } %>
+        </select>
+        <input
+          type="number"
+          name="issued"
+          placeholder="Issued"
+          required
+          class="border border-gray-300 rounded-lg px-3 py-2 focus:ring focus:ring-blue-200"
+        />
+        <input
+          type="number"
+          name="discard"
+          placeholder="Discard"
+          required
+          class="border border-gray-300 rounded-lg px-3 py-2 focus:ring focus:ring-blue-200"
+        />
+        <input
+          type="number"
+          name="repair"
+          placeholder="Repair"
+          required
+          class="border border-gray-300 rounded-lg px-3 py-2 focus:ring focus:ring-blue-200"
+        />
+        <input
+          type="number"
+          name="outOrder"
+          placeholder="Out of Order"
+          required
+          class="border border-gray-300 rounded-lg px-3 py-2 focus:ring focus:ring-blue-200"
+        />
+      </div>
+
+      <div class="flex justify-end mt-4">
+        <button
+          type="submit"
+          class="bg-red-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition-all"
+        >
+          Add Item
+        </button>
+      </div>
+    </form>
+
+    <!-- Inventory Table -->
+    <div class="bg-white shadow-md rounded-lg w-full max-w-6xl overflow-hidden">
+      <table class="min-w-full border border-gray-200">
+        <thead class="bg-red-600 text-white">
+          <tr>
+            <th class="py-3 px-4 text-left">Equipment ID</th>
+            <th class="py-3 px-4 text-center">Issued</th>
+            <th class="py-3 px-4 text-center">Discard</th>
+            <th class="py-3 px-4 text-center">Repair</th>
+            <th class="py-3 px-4 text-center">Out of Order</th>
+            <th class="py-3 px-4 text-center">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (items && items.length > 0) { %>
+            <% items.forEach(item => { %>
+              <tr id="row-<%= item.equipmentId %>" class="hover:bg-gray-50 transition">
+                <!-- Equipment Name -->
+                <td class="py-2 px-4 border-b font-medium text-gray-700">
+                  <%= equipmentMap[item.equipmentId] || item.equipmentId %>
+                </td>
+        
+                <!-- Quantities -->
+                <td class="py-2 px-4 border-b text-center" id="issued-<%= item.equipmentId %>"><%= item.issued %></td>
+                <td class="py-2 px-4 border-b text-center" id="discard-<%= item.equipmentId %>"><%= item.discard %></td>
+                <td class="py-2 px-4 border-b text-center" id="repair-<%= item.equipmentId %>"><%= item.repair %></td>
+                <td class="py-2 px-4 border-b text-center" id="outOrder-<%= item.equipmentId %>"><%= item.outOrder %></td>
+        
+                <!-- Total -->
+                <td class="py-2 px-4 border-b text-center font-semibold text-blue-700">
+                  <%= item.total %>
+                </td>
+        
+                <!-- Action Buttons -->
+                <td class="py-2 px-4 border-b text-center space-x-2">
+                  <button
+                    class="bg-red-600 text-white px-3 py-1 rounded-md hover:bg-blue-700 transition"
+                    id="editBtn-<%= item.equipmentId %>"
+                    onclick="enableEdit('<%= item.equipmentId %>')"
+                  >
+                    Modify
+                  </button>
+        
+                  <button
+                    class="hidden bg-green-600 text-white px-3 py-1 rounded-md hover:bg-green-700 transition"
+                    id="saveBtn-<%= item.equipmentId %>"
+                    onclick="saveEdit('<%= item.equipmentId %>')"
+                  >
+                    Save
+                  </button>
+        
+                  <button
+                    class="hidden bg-gray-500 text-white px-3 py-1 rounded-md hover:bg-gray-600 transition"
+                    id="cancelBtn-<%= item.equipmentId %>"
+                    onclick="cancelEdit('<%= item.equipmentId %>')"
+                  >
+                    Cancel
+                  </button>
+                </td>
+              </tr>
+            <% }) %>
+          <% } else { %>
+            <tr>
+              <td colspan="7" class="py-4 text-center text-gray-500">No inventory data available</td>
+            </tr>
+          <% } %>
+        </tbody>
+                  
+      </table>
+    </div>
+    <script>
+      function enableEdit(id) {
+        const fields = ["issued", "discard", "repair", "outOrder"];
+        fields.forEach(field => {
+          const cell = document.getElementById(`${field}-${id}`);
+          const value = cell.innerText.trim();
+          cell.innerHTML = `
+            <input 
+              type="number" 
+              id="input-${field}-${id}" 
+              value="${value}" 
+              class="w-20 text-center border border-gray-300 rounded px-1 py-0.5"
+            />
+          `;
+        });
+    
+
+        document.getElementById(`editBtn-${id}`).classList.add("hidden");
+        document.getElementById(`saveBtn-${id}`).classList.remove("hidden");
+        document.getElementById(`cancelBtn-${id}`).classList.remove("hidden");
+      }
+    
+      function cancelEdit(id) {
+        window.location.reload(); // simply reload to reset the table view
+      }
+    
+      async function saveEdit(id) {
+        const issued = document.getElementById(`input-issued-${id}`).value;
+        const discard = document.getElementById(`input-discard-${id}`).value;
+        const repair = document.getElementById(`input-repair-${id}`).value;
+        const outOrder = document.getElementById(`input-outOrder-${id}`).value;
+    
+        const payload = { equipmentId: id, issued, discard, repair, outOrder };
+    
+        try {
+          const res = await fetch("/inventory/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+    
+          const data = await res.json();
+          console.log("🔍 Response:", data);
+    
+          if (res.ok && data.success) {
+            alert("Updated successfully!");
+            window.location.reload();
+          } else {
+            alert(`Error updating item: ${data.error || "Unknown error"}`);
+          }
+        } catch (err) {
+          console.error("Fetch error:", err);
+          alert("Failed to connect to server.");
+        }
+      }
+    </script>
+    
+    
+    
+    
+  </body>
+  
+</html>

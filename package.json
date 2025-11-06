@@ -2,7 +2,7 @@
   "name": "sports-inventory",
   "version": "1.0.0",
   "type": "module",
-  "main": "app.js",
+  "main": "app4.js",
   "scripts": {
     "start": "node app.js",
     "dev": "concurrently --kill-others --success first -n \"APP,MAILER\" -c \"cyan.bold,magenta.bold\" \"node src/app5.js\" \"node nodemailer.js\"",
@@ -10,7 +10,7 @@
     "mailer": "node nodemailer.js"
   },
   "dependencies": {
-    "dotenv": "^17.2.3",
+    "dotenv": "^16.6.1",
     "ejs": "^3.1.9",
     "express": "^5.1.0",
     "express-session": "^1.18.2",
