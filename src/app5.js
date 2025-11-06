@@ -9,13 +9,25 @@ import session from "express-session";
 import { fileURLToPath } from "url";
 import nodemailer from "nodemailer";
 
-console.log("Running");
-const app = express();
-const port = 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load environment variables FIRST
 dotenv.config({ path: path.join(__dirname, "../.env") });
+
+console.log("Running");
+console.log("Database Config:", {
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  database: process.env.DB_NAME,
+  port: process.env.DB_PORT
+});
+
+const app = express();
+const port = 3001; // Changed from 3000 to avoid conflicts (app4.js uses 3002, stats-dashboard uses 3000)
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Serve static files from "style" folder
 app.use("/style", express.static(path.join(__dirname, "../style")));
@@ -44,19 +56,30 @@ const equipmentMap = {
   POL: "Pool Sticks"
 };
 
-app.listen(port);
-
 const dbConfig = {
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  port: process.env.DB_PORT,
+  port: parseInt(process.env.DB_PORT) || 3306,
 };
 
+console.log("Connecting to Railway MySQL...");
 const db = mysql.createConnection(dbConfig);
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
+db.connect((err) => {
+  if (err) {
+    console.error("❌ Database connection failed:", err.message);
+    console.error("Connection details:", {
+      host: dbConfig.host,
+      user: dbConfig.user,
+      database: dbConfig.database,
+      port: dbConfig.port
+    });
+    process.exit(1);
+  }
+  console.log("✅ Connected to Railway MySQL database");
+});
 
 app.set("view engine", "ejs");
 
@@ -264,15 +287,30 @@ app.get("/issue_login", (req, res) => {
 });
 
 app.post("/issue_login", (req, res) => {
-  const ashokaId = req.body.qrString?.trim(); // note your input is named qrString
-  const studentData = students.find(
-    (s) => String(s.AshokaId).trim() === ashokaId
-  );
+  try {
+    const ashokaId = req.body.qrString?.trim();
+    
+    if (!ashokaId) {
+      console.log("❌ Login failed: No student ID provided");
+      return res.status(400).send("Student ID is required");
+    }
+    
+    const studentData = students.find(
+      (s) => String(s.AshokaId).trim() === ashokaId
+    );
 
-  if (!studentData) return res.status(404).send("Student not found");
-  console.log("Student Data:", studentData);
-  req.session.student = studentData;
-  res.redirect("/issue"); // GET /issue will set activePage
+    if (!studentData) {
+      console.log(`❌ Login failed: Student ${ashokaId} not found`);
+      return res.status(404).send("Student not found. Please check your ID.");
+    }
+    
+    console.log("✅ Student authenticated:", studentData);
+    req.session.student = studentData;
+    res.redirect("/issue");
+  } catch (error) {
+    console.error("❌ Login error:", error);
+    res.status(500).send("An error occurred during login");
+  }
 });
 
 app.get("/inventory", (req, res) => {
@@ -281,7 +319,10 @@ app.get("/inventory", (req, res) => {
   db.query(query, (err, results) => {
     if (err) {
       console.error("Database fetch error:", err);
-      return res.status(500).send("Error fetching data");
+      return res.status(500).render("error", {
+        message: "Error fetching inventory data",
+        error: process.env.NODE_ENV === "development" ? err : {}
+      });
     }
 
     res.render("inventory", {
@@ -370,6 +411,7 @@ app.post("/inventory/update", (req, res) => {
 
 app.get("/issue", (req, res) => {
   if (!req.session.student) {
+    console.log("⚠️ Unauthorized access to /issue - redirecting to login");
     return res.redirect("/");
   }
 
@@ -395,13 +437,13 @@ app.get("/issue", (req, res) => {
 
   db.query(
     `SELECT equipment, SUM(outNum) AS totalIssued
-     FROM Sports
+     FROM sports
      WHERE status = 'PENDING'
      GROUP BY equipment`,
     (err, results) => {
       if (err) {
-        console.error("Database error:", err);
-        return res.status(500).send("Database error");
+        console.error("❌ Database error fetching issued items:", err);
+        return res.status(500).send("Database error - please try again");
       }
 
       // Transform DB result into an object
@@ -416,7 +458,7 @@ app.get("/issue", (req, res) => {
         availableItems[equipment] =
           totalItems[equipment] - (issuedItems[equipment] || 0);
       }
-      console.log("Available Items:", availableItems);
+      console.log("📊 Available Items:", availableItems);
 
       // Render page inside the callback
       res.render("issue", {
@@ -429,81 +471,95 @@ app.get("/issue", (req, res) => {
 });
 
 app.post("/issue", (req, res) => {
-  const outTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
-
-  const quantity = req.body.quantity || {};
-
-  // Filter equipment with non-zero quantity
-  const equipmentList = Object.keys(quantity).filter(
-    (item) => Number(quantity[item]) > 0
-  );
-
-  if (equipmentList.length === 0) {
-    return res.redirect("/landing");
+  if (!req.session.student) {
+    console.log("⚠️ Unauthorized issue attempt");
+    return res.status(401).send("Please log in first");
   }
 
-  let completed = 0;
-  let hasError = false;
-  const insertedIds = [];
+  try {
+    const outTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
+    const quantity = req.body.quantity || {};
 
-  equipmentList.forEach((item) => {
-    const qtyToIssue = Number(quantity[item]);
-
-    // Insert a new row for each issue
-    db.query(
-      "INSERT INTO Sports (studentId, name, equipment, outNum, outTime, status, inNum) VALUES (?, ?, ?, ?, ?, 'PENDING', 0)",
-      [
-        req.session.student.AshokaId,
-        req.session.student.name,
-        item,
-        qtyToIssue,
-        outTime,
-      ],
-      (insertErr, result) => {
-        if (insertErr) {
-          hasError = true;
-          console.error("Error issuing equipment:", insertErr);
-          if (!res.headersSent) return res.status(500).send("Database error");
-        } else {
-          insertedIds.push({ id: result.insertId, equipment: item, qty: qtyToIssue });
-        }
-        
-        completed++;
-        
-        if (completed === equipmentList.length && !hasError) {
-          // All inserts complete - send email
-          const equipmentCounts = {};
-          insertedIds.forEach(({ equipment, qty }) => {
-            equipmentCounts[equipment] = qty;
-          });
-
-          // Log emails to DB
-          let emailLogsCompleted = 0;
-          insertedIds.forEach(({ id }) => {
-            logEmailSentDB(id, "BORROW", (logErr) => {
-              if (logErr) {
-                console.error("Error logging email:", logErr);
-              }
-              emailLogsCompleted++;
-              
-              if (emailLogsCompleted === insertedIds.length) {
-                // All logs complete - send the email
-                sendBorrowEmail(
-                  req.session.student.AshokaId,
-                  req.session.student.name,
-                  equipmentCounts
-                ).catch(err => {
-                  console.error("Email send error:", err);
-                });
-              }
-            });
-          });
-
-          res.redirect("/landing");
-        }
-      }
+    // Filter equipment with non-zero quantity
+    const equipmentList = Object.keys(quantity).filter(
+      (item) => Number(quantity[item]) > 0
     );
-  });
+
+    if (equipmentList.length === 0) {
+      console.log("⚠️ No equipment selected");
+      return res.redirect("/landing");
+    }
+
+    console.log(`📦 Issuing equipment to ${req.session.student.name}:`, equipmentList);
+
+    let completed = 0;
+    let hasError = false;
+    const insertedIds = [];
+
+    equipmentList.forEach((item) => {
+      const qtyToIssue = Number(quantity[item]);
+
+      // Insert a new row for each issue
+      db.query(
+        "INSERT INTO sports (studentId, name, equipment, outNum, outTime, status, inNum) VALUES (?, ?, ?, ?, ?, 'PENDING', 0)",
+        [
+          req.session.student.AshokaId,
+          req.session.student.name,
+          item,
+          qtyToIssue,
+          outTime,
+        ],
+        (insertErr, result) => {
+          if (insertErr) {
+            hasError = true;
+            console.error("❌ Error issuing equipment:", insertErr);
+            if (!res.headersSent) return res.status(500).send("Database error - please try again");
+          } else {
+            insertedIds.push({ id: result.insertId, equipment: item, qty: qtyToIssue });
+          }
+          
+          completed++;
+          
+          if (completed === equipmentList.length && !hasError) {
+            console.log(`✅ Successfully issued ${equipmentList.length} items`);
+            
+            // All inserts complete - send email
+            const equipmentCounts = {};
+            insertedIds.forEach(({ equipment, qty }) => {
+              equipmentCounts[equipment] = qty;
+            });
+
+            // Log emails to DB
+            let emailLogsCompleted = 0;
+            insertedIds.forEach(({ id }) => {
+              logEmailSentDB(id, "BORROW", (logErr) => {
+                if (logErr) {
+                  console.error("Error logging email:", logErr);
+                }
+                emailLogsCompleted++;
+                
+                if (emailLogsCompleted === insertedIds.length) {
+                  // All logs complete - send the email
+                  sendBorrowEmail(
+                    req.session.student.AshokaId,
+                    req.session.student.name,
+                    equipmentCounts
+                  ).catch(err => {
+                    console.error("Email send error:", err);
+                  });
+                }
+              });
+            });
+
+            res.redirect("/landing");
+          }
+        }
+      );
+    });
+  } catch (error) {
+    console.error("❌ Issue error:", error);
+    res.status(500).send("An error occurred while issuing equipment");
+  }
 });
 
 
@@ -515,23 +571,39 @@ app.get("/return_login", (req, res) => {
 });
 
 app.post("/return_login", (req, res) => {
-  const ashokaId = req.body.qrString?.trim();
-  const studentData = students.find(
-    (s) => String(s.AshokaId).trim() === ashokaId
-  );
+  try {
+    const ashokaId = req.body.qrString?.trim();
+    
+    if (!ashokaId) {
+      console.log("❌ Return login failed: No student ID provided");
+      return res.status(400).send("Student ID is required");
+    }
+    
+    const studentData = students.find(
+      (s) => String(s.AshokaId).trim() === ashokaId
+    );
 
-  if (!studentData) return res.status(404).send("Student not found");
+    if (!studentData) {
+      console.log(`❌ Return login failed: Student ${ashokaId} not found`);
+      return res.status(404).send("Student not found. Please check your ID.");
+    }
 
-  req.session.student = studentData;
-  res.redirect("/landing"); // GET /landing will set activePage
+    console.log("✅ Student authenticated for return:", studentData);
+    req.session.student = studentData;
+    res.redirect("/landing");
+  } catch (error) {
+    console.error("❌ Return login error:", error);
+    res.status(500).send("An error occurred during login");
+  }
 });
 
 app.get("/landing", (req, res) => {
-  // If you have AshokaId in session, use it; otherwise, redirect to login
-  // Render a form that auto-submits AshokaId to POST /landing
   if (!req.session.student) {
-    return res.redirect("/return_login"); // redirect if no student session
+    console.log("⚠️ Unauthorized access to /landing - redirecting to login");
+    return res.redirect("/return_login");
   }
+  
+  console.log(`📍 Landing page accessed by: ${req.session.student.name}`);
   res.render("landing_redirect", {
     ashokaId: req.session.student.AshokaId,
     activePage: "landing",
@@ -539,34 +611,43 @@ app.get("/landing", (req, res) => {
 });
 
 app.post("/landing", async (req, res) => {
-  // var processedQr = processQr(req.body.qrString);
-  // if (processedQr.isValid) {
-  const ashokaId = String(req.body.qrString).trim();
-  const studentData = students.find((student) => {
-    return String(student.AshokaId).trim() === String(ashokaId).trim();
-  });
-  // });
-  if (!studentData) {
-    return res.status(404).send("Student not found");
-  }
-  req.session.student = studentData; // store in session
-  db.query(
-    "SELECT studentId, name, equipment, outNum, inNum, status, outTime, inTime FROM Sports WHERE studentId = ? AND status = 'PENDING'",
-    [ashokaId],
-    (err, results) => {
-      if (err) return res.status(500).send("Database error");
-      // Format outTime before sending to EJS
-      results.forEach((r) => {
-        r.outTime = moment(r.outTime)
-          .tz("Asia/Kolkata")
-          .format("ddd DD-MM-YYYY HH:mm:ss");
-      });
-      res.render("landing", { student: studentData, equipment: results });
+  try {
+    const ashokaId = String(req.body.qrString).trim();
+    const studentData = students.find((student) => {
+      return String(student.AshokaId).trim() === String(ashokaId).trim();
+    });
+    
+    if (!studentData) {
+      console.log(`❌ Student ${ashokaId} not found`);
+      return res.status(404).send("Student not found");
     }
-  );
-  // } else {
-  //   res.status(400).send("Invalid QR");
-  // }
+    
+    req.session.student = studentData;
+    
+    db.query(
+      "SELECT studentId, name, equipment, outNum, inNum, status, outTime, inTime FROM sports WHERE studentId = ? AND status = 'PENDING'",
+      [ashokaId],
+      (err, results) => {
+        if (err) {
+          console.error("❌ Database error fetching pending items:", err);
+          return res.status(500).send("Database error - please try again");
+        }
+        
+        // Format outTime before sending to EJS
+        results.forEach((r) => {
+          r.outTime = moment(r.outTime)
+            .tz("Asia/Kolkata")
+            .format("ddd DD-MM-YYYY HH:mm:ss");
+        });
+        
+        console.log(`📋 Found ${results.length} pending items for ${studentData.name}`);
+        res.render("landing", { student: studentData, equipment: results });
+      }
+    );
+  } catch (error) {
+    console.error("❌ Landing page error:", error);
+    res.status(500).send("An error occurred while loading your equipment");
+  }
 });
 
 app.post("/returnOne", (req, res) => {
@@ -580,7 +661,7 @@ app.post("/returnOne", (req, res) => {
 
   // Fetch the oldest pending row for that equipment
   db.query(
-    `SELECT * FROM Sports 
+    `SELECT * FROM sports 
      WHERE studentId = ? AND equipment = ? AND status = 'PENDING'
      ORDER BY outTime ASC 
      LIMIT 1`,
@@ -600,7 +681,7 @@ app.post("/returnOne", (req, res) => {
       const newStatus = "RETURNED";
 
       db.query(
-        `UPDATE Sports 
+        `UPDATE sports 
          SET inNum = ?, status = ?, inTime = ? 
          WHERE id = ?`,
         [newInNum, newStatus, returnTime, row.id],
@@ -652,7 +733,7 @@ app.post("/returnMany", (req, res) => {
 
   equipments.forEach((equipment) => {
     db.query(
-      `SELECT * FROM Sports 
+      `SELECT * FROM sports 
        WHERE studentId = ? AND equipment = ? AND status = 'PENDING'
        ORDER BY outTime ASC 
        LIMIT 1`,
@@ -683,7 +764,7 @@ app.post("/returnMany", (req, res) => {
 
         const row = rows[0];
         db.query(
-          `UPDATE Sports 
+          `UPDATE sports 
            SET inNum = ?, status = ?, inTime = ? 
            WHERE id = ?`,
           [row.outNum, "RETURNED", returnTime, row.id],
@@ -735,3 +816,5 @@ app.get("/logout", (req, res) => {
   });
   res.redirect("/");
 });
+
+app.listen(port);

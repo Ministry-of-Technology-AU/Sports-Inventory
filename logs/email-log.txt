@@ -169,3 +169,8 @@
 [2025-11-06T15:15:56.968Z] 🔍 Checking for LATE borrowers to email...
 [2025-11-06T15:15:56.969Z]    ℹ️ No LATE records found
 [2025-11-06T15:15:56.969Z] ✅ Initial check complete
+[2025-11-06T20:21:06.821Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-06T20:24:04.721Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-06T20:24:14.234Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-06T20:24:26.792Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)
+[2025-11-06T20:27:41.425Z] 📧 Using Gmail OAuth2 auth for transporter (if configured)

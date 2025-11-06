@@ -5,3 +5,4 @@
 .env.production.local
 logs/email-log.txt
 credentials.json
+logs/email-log.txt
