@@ -8,19 +8,51 @@ import dotenv from "dotenv";
 import session from "express-session";
 import { fileURLToPath } from "url";
 
+
+
+
+
 console.log("Running");
 const app = express();
 const port = 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config({ path: path.join(__dirname, "../.env") });
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+
+dotenv.config({ path: path.join(__dirname, "../.env") }); 
 
 // Serve static files from "style" folder
 app.use("/style", express.static(path.join(__dirname, "../style")));
 app.use("/images", express.static(path.join(__dirname, "../images")));
 
-app.listen(port);
+
+const equipmentMap = {
+  BDM: "Badminton Racket",
+  SQH: "Squash",
+  TNS: "Tennis",
+  TTN: "Table Tennis",
+  CHS: "Chess",
+  CRM: "Carrom Coin",
+  BSK: "Basketball",
+  FTB: "Football",
+  VLB: "Volleyball",
+  YGM: "Yoga Mat",
+  PKL: "Pickleball Racket",
+  CYC: "Cycle",
+  CRK: "Cricket Bat",
+  WTM: "Weight Machine",
+  BXG: "Boxing Gloves",
+  WLK: "Washroom Locker Key",
+  FSB: "Frisbee",
+  FBL: "Foosball",
+  DRB: "Daateball",
+  POL: "Pool Sticks"
+};
+
+
 
 const dbConfig = {
   host: process.env.DB_HOST,
@@ -73,6 +105,103 @@ app.get("/issue_login", (req, res) => {
     activePage: "issue", // highlight Issue page in navbar
   });
 });
+
+app.get("/inventory", (req, res) => {
+  const query = "SELECT * FROM Inventory"; // your table name
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error("Database fetch error:", err);
+      return res.status(500).send("Error fetching data");
+    }
+
+    res.render("inventory", {
+      activePage: "inventory",
+      items: results || [],
+      equipmentMap: equipmentMap,
+    });
+  });
+});
+app.post("/inventory/add", (req, res) => {
+  const { equipmentId, issued, discard, repair, outOrder } = req.body;
+
+  
+  const checkQuery = `SELECT * FROM inventory WHERE equipmentId = ?`;
+
+  db.query(checkQuery, [equipmentId], (err, results) => {
+    if (err) {
+      console.error("Database fetch error:", err);
+      return res.status(500).send("Error checking inventory item");
+    }
+
+    if (results.length > 0) {
+      
+      const updateQuery = `
+        UPDATE inventory
+        SET issued = ?, discard = ?, repair = ?, outOrder = ?
+        WHERE equipmentId = ?
+      `;
+
+      db.query(updateQuery, [issued, discard, repair, outOrder, equipmentId], (updateErr) => {
+        if (updateErr) {
+          console.error("Database update error:", updateErr);
+          return res.status(500).send("Error updating inventory item");
+        }
+        res.redirect("/inventory");
+      });
+
+    } else {
+      
+      const insertQuery = `
+        INSERT INTO inventory (equipmentId, issued, discard, repair, outOrder)
+        VALUES (?, ?, ?, ?, ?)
+      `;
+
+      db.query(insertQuery, [equipmentId, issued, discard, repair, outOrder], (insertErr) => {
+        if (insertErr) {
+          console.error("Database insert error:", insertErr);
+          return res.status(500).send("Error adding inventory item");
+        }
+        res.redirect("/inventory");
+      });
+    }
+  });
+});
+
+app.post("/inventory/update", (req, res) => {
+  const { equipmentId, issued, discard, repair, outOrder } = req.body;
+
+  if (!equipmentId) {
+    console.error("Missing equipmentId");
+    return res.status(400).json({ success: false, error: "Missing equipmentId" });
+  }
+
+  const query = `
+    UPDATE inventory
+    SET issued = ?, discard = ?, repair = ?, outOrder = ?
+    WHERE equipmentId = ?
+  `;
+
+  db.query(query, [issued, discard, repair, outOrder, equipmentId], (err, result) => {
+    if (err) {
+      console.error("Database update error:", err);
+      return res.status(500).json({ success: false, error: "Database update failed" });
+    }
+
+    if (result.affectedRows === 0) {
+      console.warn("⚠️ No matching equipment found");
+      return res.status(404).json({ success: false, error: "Item not found" });
+    }
+
+    console.log(`Updated equipment ${equipmentId}`);
+    res.json({ success: true });
+  });
+});
+
+
+
+
+
 app.post("/issue_login", (req, res) => {
   const ashokaId = req.body.qrString?.trim(); // note your input is named qrString
   const studentData = students.find(
@@ -361,3 +490,6 @@ app.get("/logout", (req, res) => {
   });
   res.redirect("/");
 });
+
+
+app.listen(port);
