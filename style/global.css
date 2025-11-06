@@ -5,13 +5,21 @@
   --text-color: #333;
   --text-color-secondary: white;
 }
+
 body {
   background-color: var(--off-white);
   font-family: "nunitio", sans-serif;
 }
+
 .box {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 3rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-top: 100px;
+  margin-bottom: 200px;
   background-color: var(--secondary-color);
   color: var(--text-color-secondary);
   width: 80%;
-  padding: 20px;
+  border-radius: 2rem;
 }

@@ -1,207 +1,459 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>issue</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="/style/issue.css" />
-  </head>
-  <body>
-    <%- include("nav",{ activePage: "issue" }) %>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>issue</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
+    rel="stylesheet" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Nunito", sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+
+    .box {
+      max-width: 1400px;
+      margin: 0 auto;
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .up {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+
+    .details {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .details p {
+      font-size: 16px;
+      color: #555;
+    }
+
+    .up h1 {
+      font-size: 28px;
+      color: #333;
+    }
+
+    .fake {
+      opacity: 0;
+    }
+
+    /* Selected items summary */
+    .selected-summary {
+      display: none;
+      background: #f8f9fa;
+      border: 2px solid #e9ecef;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 25px;
+    }
+
+    .selected-summary.active {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 20px;
+    }
+
+    .selected-items {
+      flex: 1;
+    }
+
+    .selected-items h3 {
+      font-size: 20px;
+      margin-bottom: 15px;
+      color: #333;
+    }
+
+    .selected-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .selected-item {
+      background: white;
+      padding: 10px 16px;
+      border-radius: 6px;
+      border: 1px solid #dee2e6;
+      font-size: 15px;
+      color: #495057;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .selected-item strong {
+      color: #007bff;
+      margin-right: 5px;
+    }
+
+    .submit-container {
+      display: flex;
+      align-items: center;
+    }
+
+    .submit-container button {
+      background: #28a745;
+      color: white;
+      border: none;
+      padding: 14px 32px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.3s;
+      white-space: nowrap;
+    }
+
+    .submit-container button:hover {
+      background: #218838;
+    }
+
+    /* Equipment grid with header */
+    .equipment-section {
+      margin-top: 20px;
+    }
+
+    .grid-header {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+      padding: 15px 20px;
+      background: #007bff;
+      color: white;
+      border-radius: 8px 8px 0 0;
+      font-weight: 600;
+      font-size: 16px;
+      margin-bottom: 0;
+    }
+
+    .header-item {
+      text-align: center;
+    }
+
+    .equipment-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 0 0 8px 8px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+      transition: transform 0.2s, box-shadow 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    }
+
+    .card img {
+      width: 180px;
+      height: 180px;
+      object-fit: cover;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+
+    .card label {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .card .availability {
+      font-size: 15px;
+      color: #28a745;
+      font-weight: 600;
+      margin-bottom: 15px;
+    }
+
+    .something {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .something button {
+      width: 36px;
+      height: 36px;
+      border: 2px solid #007bff;
+      background: white;
+      color: #007bff;
+      font-size: 20px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .something button:hover:not(:disabled) {
+      background: #007bff;
+      color: white;
+    }
+
+    .something button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .something input {
+      width: 60px;
+      height: 36px;
+      text-align: center;
+      font-size: 16px;
+      font-weight: 600;
+      border: 2px solid #dee2e6;
+      border-radius: 6px;
+    }
+
+    .card[style*="opacity"] {
+      opacity: 0.5 !important;
+      pointer-events: none;
+    }
+  </style>
+</head>
+
+<body>
+  <%- include("nav",{ activePage: "issue" }) %>
     <div class="box">
       <div class="up">
         <h1 class="details">
-          <p><%= student.name %></p>
-          <p><%= student.AshokaId %></p>
+          <p>
+            <%= student.name %>
+          </p>
+          <p>
+            <%= student.AshokaId %>
+          </p>
         </h1>
         <h1>Issue Equipment</h1>
         <h1 class="fake">H</h1>
       </div>
+
       <form action="/issue" method="POST">
-        <div class="card">
-          <img src="/images/badminton racquet.jpeg" alt="" />
-
-          <label for="Badminton Racquet">Badminton Racquet</label>
-          <p class="availability">
-            Available: <%= availableItems["Badminton Racquet"] %>
-          </p>
-          <div class="something">
-            <button type="button" class="decrement">-</button>
-            <input
-              type="number"
-              name="quantity[Badminton Racquet]"
-              value="0"
-              min="0"
-              step="1"
-            />
-            <button type="button" class="increment">+</button>
+        <!-- Selected items summary -->
+        <div class="selected-summary" id="selectedSummary">
+          <div class="selected-items">
+            <h3>Selected Equipment:</h3>
+            <div class="selected-list" id="selectedList"></div>
           </div>
-        </div>
-        <div class="card">
-          <img src="/images/TT Racquet.jpg" alt="" />
-
-          <label for="Table Tennis Racquet">Table Tennis Racquet</label>
-          <p class="availability">
-            Available: <%= availableItems["Table Tennis Racquet"] %>
-          </p>
-          <div class="something">
-            <button type="button" class="decrement">-</button>
-            <input
-              type="number"
-              name="quantity[Table Tennis Racquet]"
-              value="0"
-              min="0"
-              step="1"
-            />
-            <button type="button" class="increment">+</button>
-          </div>
-        </div>
-        <div class="card">
-          <img src="/images/squash racquet.jpg" alt="" />
-
-          <label for="Squash Racquet">Squash Racquet</label>
-          <p class="availability">
-            Available: <%= availableItems["Squash Racquet"] %>
-          </p>
-          <div class="something">
-            <button type="button" class="decrement">-</button>
-            <input
-              type="number"
-              name="quantity[Squash Racquet]"
-              value="0"
-              min="0"
-              step="1"
-            />
-            <button type="button" class="increment">+</button>
-          </div>
-        </div>
-        <div class="card">
-          <img src="/images/tennis racquet.webp" alt="" />
-
-          <label for="Tennis Racquet">Tennis Racquet </label>
-          <p class="availability">
-            Available: <%= availableItems["Tennis Racquet"] %>
-          </p>
-          <div class="something">
-            <button type="button" class="decrement">-</button>
-            <input
-              type="number"
-              name="quantity[Tennis Racquet]"
-              value="0"
-              min="0"
-              step="1"
-            />
-            <button type="button" class="increment">+</button>
-          </div>
-        </div>
-        <div class="card">
-          <img src="/images/pickleball.jpg" alt="" />
-          <label for="Pickleball Racquet">Pickleball Racquet</label>
-          <p class="availability">
-            Available: <%= availableItems["Pickleball Racquet"] %>
-          </p>
-          <div class="something">
-            <button type="button" class="decrement">-</button>
-            <input
-              type="number"
-              name="quantity[Pickleball Racquet]"
-              value="0"
-              min="0"
-              step="1"
-            />
-            <button type="button" class="increment">+</button>
-          </div>
-        </div>
-        <div class="card">
-          <img src="/images/pool stick.webp" alt="" />
-          <label for="Pool Stick">Pool Stick</label>
-          <p class="availability">
-            Available: <%= availableItems["Pool Stick"] %>
-          </p>
-          <div class="something">
-            <button type="button" class="decrement">-</button>
-            <input
-              type="number"
-              name="quantity[Pool Stick]"
-              value="0"
-              min="0"
-              step="1"
-            />
-            <button type="button" class="increment">+</button>
-          </div>
-        </div>
-        <div class="card">
-          <img src="/images/cycle.jpg" alt="" />
-          <label for="Cycle">Cycle</label>
-          <p class="availability">Available: <%= availableItems["Cycle"] %></p>
-          <div class="something">
-            <button type="button" class="decrement">-</button>
-            <input
-              type="number"
-              name="quantity[Cycle]"
-              value="0"
-              min="0"
-              step="1"
-            />
-            <button type="button" class="increment">+</button>
-          </div>
-        </div>
-        <div class="card">
-          <img src="/images/football.jpeg" alt="" />
-          <label for="Football">Football</label>
-          <p class="availability">
-            Available: <%= availableItems["Football"] %>
-          </p>
-          <div class="something">
-            <button type="button" class="decrement">-</button>
-            <input
-              type="number"
-              name="quantity[Football]"
-              value="0"
-              min="0"
-              step="1"
-            />
-            <button type="button" class="increment">+</button>
+          <div class="submit-container">
+            <button type="submit">Submit</button>
           </div>
         </div>
 
-        <br />
-        <div class="bottom">
-          <p>Sports Inventory Management</p>
-          <button type="submit">Submit</button>
+        <!-- Equipment grid with header -->
+        <div class="equipment-section">
+          <div class="grid-header">
+            <div class="header-item">Equipment</div>
+            <div class="header-item">Available</div>
+            <div class="header-item">Quantity</div>
+          </div>
+
+          <div class="equipment-grid">
+            <div class="card">
+              <img src="/images/badminton racquet.jpeg" alt="" />
+              <label for="Badminton Racquet">Badminton Racquet</label>
+              <p class="availability">
+                <%= availableItems["Badminton Racquet"] %>
+              </p>
+              <div class="something">
+                <button type="button" class="decrement">-</button>
+                <input type="number" name="quantity[Badminton Racquet]" value="0" min="0" step="1"
+                  data-name="Badminton Racquet" />
+                <button type="button" class="increment">+</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <img src="/images/TT Racquet.jpg" alt="" />
+              <label for="Table Tennis Racquet">Table Tennis Racquet</label>
+              <p class="availability">
+                <%= availableItems["Table Tennis Racquet"] %>
+              </p>
+              <div class="something">
+                <button type="button" class="decrement">-</button>
+                <input type="number" name="quantity[Table Tennis Racquet]" value="0" min="0" step="1"
+                  data-name="Table Tennis Racquet" />
+                <button type="button" class="increment">+</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <img src="/images/squash racquet.jpg" alt="" />
+              <label for="Squash Racquet">Squash Racquet</label>
+              <p class="availability">
+                <%= availableItems["Squash Racquet"] %>
+              </p>
+              <div class="something">
+                <button type="button" class="decrement">-</button>
+                <input type="number" name="quantity[Squash Racquet]" value="0" min="0" step="1"
+                  data-name="Squash Racquet" />
+                <button type="button" class="increment">+</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <img src="/images/tennis racquet.webp" alt="" />
+              <label for="Tennis Racquet">Tennis Racquet</label>
+              <p class="availability">
+                <%= availableItems["Tennis Racquet"] %>
+              </p>
+              <div class="something">
+                <button type="button" class="decrement">-</button>
+                <input type="number" name="quantity[Tennis Racquet]" value="0" min="0" step="1"
+                  data-name="Tennis Racquet" />
+                <button type="button" class="increment">+</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <img src="/images/pickleball.jpg" alt="" />
+              <label for="Pickleball Racquet">Pickleball Racquet</label>
+              <p class="availability">
+                <%= availableItems["Pickleball Racquet"] %>
+              </p>
+              <div class="something">
+                <button type="button" class="decrement">-</button>
+                <input type="number" name="quantity[Pickleball Racquet]" value="0" min="0" step="1"
+                  data-name="Pickleball Racquet" />
+                <button type="button" class="increment">+</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <img src="/images/pool stick.webp" alt="" />
+              <label for="Pool Stick">Pool Stick</label>
+              <p class="availability">
+                <%= availableItems["Pool Stick"] %>
+              </p>
+              <div class="something">
+                <button type="button" class="decrement">-</button>
+                <input type="number" name="quantity[Pool Stick]" value="0" min="0" step="1" data-name="Pool Stick" />
+                <button type="button" class="increment">+</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <img src="/images/cycle.jpg" alt="" />
+              <label for="Cycle">Cycle</label>
+              <p class="availability">
+                <%= availableItems["Cycle"] %>
+              </p>
+              <div class="something">
+                <button type="button" class="decrement">-</button>
+                <input type="number" name="quantity[Cycle]" value="0" min="0" step="1" data-name="Cycle" />
+                <button type="button" class="increment">+</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <img src="/images/football.jpeg" alt="" />
+              <label for="Football">Football</label>
+              <p class="availability">
+                <%= availableItems["Football"] %>
+              </p>
+              <div class="something">
+                <button type="button" class="decrement">-</button>
+                <input type="number" name="quantity[Football]" value="0" min="0" step="1" data-name="Football" />
+                <button type="button" class="increment">+</button>
+              </div>
+            </div>
+          </div>
         </div>
       </form>
     </div>
 
     <script>
+      function updateSelectedSummary() {
+        const selectedList = document.getElementById('selectedList');
+        const selectedSummary = document.getElementById('selectedSummary');
+        const inputs = document.querySelectorAll('input[type=number]');
+
+        selectedList.innerHTML = '';
+        let hasSelection = false;
+
+        inputs.forEach(input => {
+          const value = parseInt(input.value) || 0;
+          if (value > 0) {
+            hasSelection = true;
+            const itemName = input.dataset.name;
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'selected-item';
+            itemDiv.innerHTML = `<strong>${value}x</strong> ${itemName}`;
+            selectedList.appendChild(itemDiv);
+          }
+        });
+
+        if (hasSelection) {
+          selectedSummary.classList.add('active');
+        } else {
+          selectedSummary.classList.remove('active');
+        }
+      }
+
       document.querySelectorAll(".card").forEach((card) => {
-        const availabilityText =
-          card.querySelector(".availability").textContent;
-        const availableMatch = availabilityText.match(/(\d+)/);
-        const available = availableMatch ? parseInt(availableMatch[1]) : 0;
+        const availabilityText = card.querySelector(".availability").textContent;
+        const available = parseInt(availabilityText) || 0;
         const input = card.querySelector("input[type=number]");
         const incBtn = card.querySelector(".increment");
         const decBtn = card.querySelector(".decrement");
+
         if (available === 0) {
           incBtn.disabled = true;
           input.disabled = true;
-          card.style.opacity = "0.6";
+          card.style.opacity = "0.5";
         }
+
         incBtn.addEventListener("click", function () {
           const val = parseInt(input.value) || 0;
-          if (val < available) input.value = val + 1;
+          if (val < available) {
+            input.value = val + 1;
+            updateSelectedSummary();
+          }
         });
+
         decBtn.addEventListener("click", function () {
           const val = parseInt(input.value) || 0;
           input.value = Math.max(0, val - 1);
+          updateSelectedSummary();
         });
+
+        input.addEventListener('change', updateSelectedSummary);
       });
     </script>
-  </body>
+</body>
+
 </html>

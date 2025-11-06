@@ -1,0 +1,282 @@
+:root {
+    --primary-color: #c4122f;
+    --secondary-color: #0d3862;
+    --off-white: #faf6e3;
+    --text-color: #333;
+    --text-color-secondary: white;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.up {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    /* border-bottom: 3px solid var(--primary-color); */
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.up h1 {
+    font-size: 1.8rem;
+    /* color: var(--secondary-color); */
+    font-weight: 700;
+}
+
+.details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.details p {
+    font-size: 1.1rem;
+    /* color: var(--text-color); */
+    font-weight: 600;
+}
+
+.details p:first-child {
+    /* color: var(--primary-color); */
+    font-size: 1.3rem;
+}
+
+.fake {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.noPendingEquipment {
+    text-align: center;
+    padding: 3rem 2rem;
+    font-size: 1.2rem;
+    color: #666;
+    font-style: italic;
+}
+
+/* Table Styling */
+table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 2rem 0;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+thead {
+    background: linear-gradient(135deg, var(--secondary-color) 0%, #1a4d7a 100%);
+    color: var(--text-color-secondary);
+}
+
+thead th {
+    padding: 1.2rem 1.5rem;
+    text-align: left;
+    font-weight: 700;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none;
+    text-align: center;
+}
+
+tbody tr {
+    background: white;
+    transition: all 0.3s ease;
+}
+
+tbody tr:nth-child(even) {
+    background: #f8f9fa;
+}
+
+/* tbody tr:hover {
+    background: linear-gradient(90deg, rgba(196, 18, 47, 0.05) 0%, rgba(196, 18, 47, 0.02) 100%);
+    transform: translateX(5px);
+    box-shadow: -5px 0 0 var(--primary-color);
+} */
+
+tbody td {
+    padding: 1.2rem 1.5rem;
+    border: none;
+    /* border-bottom: 1px solid #e9ecef; */
+    font-size: 0.95rem;
+    color: var(--text-color);
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Bottom Section */
+.bottom {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    /* border-top: 2px solid #e9ecef; */
+}
+
+#returnSelectedBtn {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #a00f26 100%);
+    color: white;
+    border: none;
+    padding: 1rem 3rem;
+    font-size: 1.1rem;
+    font-weight: 700;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(196, 18, 47, 0.3);
+    text-transform: uppercase;
+
+}
+
+#returnSelectedBtn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 25px rgba(196, 18, 47, 0.4);
+    background: linear-gradient(135deg, #a00f26 0%, var(--primary-color) 100%);
+}
+
+#returnSelectedBtn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 10px rgba(196, 18, 47, 0.3);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    body {
+        padding: 1rem;
+    }
+
+    .box {
+        padding: 1.5rem;
+        border-radius: 12px;
+    }
+
+    .up {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .up h1 {
+        font-size: 1.4rem;
+    }
+
+    .fake {
+        display: none;
+    }
+
+    table {
+        font-size: 0.85rem;
+    }
+
+    thead th,
+    tbody td {
+        padding: 0.8rem;
+    }
+
+    #returnSelectedBtn {
+        padding: 0.8rem 2rem;
+        font-size: 1rem;
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    thead th,
+    tbody td {
+        padding: 0.6rem;
+        font-size: 0.8rem;
+    }
+}
+
+.checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: pointer;
+    height: 24px;
+    width: 24px;
+}
+
+/* Hide the real checkbox but keep it clickable */
+.equipment-checkbox {
+    position: absolute;
+    opacity: 0;
+    cursor: pointer;
+    height: 24px;
+    width: 24px;
+    margin: 0;
+    z-index: 2;
+    /* ensures it captures the click */
+}
+
+/* The visual box */
+.checkmark {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 24px;
+    width: 24px;
+    background-color: white;
+    border: 2px solid #cbd5e0;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    pointer-events: none;
+    /* allow click to go through */
+}
+
+/* Checked state */
+.equipment-checkbox:checked~.checkmark {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+/* Tick mark */
+.checkmark:after {
+    content: "";
+    position: absolute;
+    display: none;
+    left: 7px;
+    top: 3px;
+    width: 6px;
+    height: 11px;
+    border: solid white;
+    border-width: 0 2.5px 2.5px 0;
+    transform: rotate(45deg);
+}
+
+.equipment-checkbox:checked~.checkmark:after {
+    display: block;
+}
+
+/* Hover effect */
+.checkbox:hover .checkmark {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(196, 18, 47, 0.1);
+}
+
+td:last-child {
+    text-align: center;
+    vertical-align: middle;
+}

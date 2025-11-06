@@ -68,7 +68,7 @@ app.get("/", (req, res) => {
   });
 });
 app.get("/issue_login", (req, res) => {
-  req.session.destroy(() => {});
+  req.session.destroy(() => { });
   res.render("issue_login", {
     activePage: "issue", // highlight Issue page in navbar
   });
@@ -99,19 +99,19 @@ app.get("/issue", (req, res) => {
     "Pool Stick": 5,
     "Cycle": 7,
     "Football": 10,
-    "Volleyball":6,
-    "Basketball":8,
-    "Fooseball":2,
-    "Yoga Mat":5,
-    "Chess":3,
+    "Volleyball": 6,
+    "Basketball": 8,
+    "Fooseball": 2,
+    "Yoga Mat": 5,
+    "Chess": 3,
     "Cricket Bat": 4,
-    "Frisbee":4,
-    
+    "Frisbee": 4,
+
   };
 
   db.query(
     `SELECT equipment, SUM(outNum) AS totalIssued
-     FROM Sports
+     FROM SPORTS
      WHERE status = 'PENDING'
      GROUP BY equipment`,
     (err, results) => {
@@ -166,7 +166,7 @@ app.post("/issue", (req, res) => {
 
     // Insert a new row for each issue
     db.query(
-      "INSERT INTO Sports (studentId, name, equipment, outNum, outTime, status, inNum) VALUES (?, ?, ?, ?, ?, 'PENDING', 0)",
+      "INSERT INTO SPORTS (studentId, name, equipment, outNum, outTime, status, inNum) VALUES (?, ?, ?, ?, ?, 'PENDING', 0)",
       [
         req.session.student.AshokaId,
         req.session.student.name,
@@ -189,7 +189,7 @@ app.post("/issue", (req, res) => {
   });
 });
 app.get("/return_login", (req, res) => {
-  req.session.destroy(() => {});
+  req.session.destroy(() => { });
   res.render("return_login", {
     activePage: "landing", // highlight Landing/Return page
   });
@@ -230,7 +230,7 @@ app.post("/landing", async (req, res) => {
   }
   req.session.student = studentData; // store in session
   db.query(
-    "SELECT studentId, name, equipment, outNum, inNum, status, outTime, inTime FROM Sports WHERE studentId = ? AND status = 'PENDING'",
+    "SELECT studentId, name, equipment, outNum, inNum, status, outTime, inTime FROM SPORTS WHERE studentId = ? AND status = 'PENDING'",
     [ashokaId],
     (err, results) => {
       if (err) return res.status(500).send("Database error");
@@ -258,7 +258,7 @@ app.post("/returnOne", (req, res) => {
 
   // Fetch the oldest pending row for that equipment
   db.query(
-    `SELECT * FROM Sports 
+    `SELECT * FROM SPORTS 
      WHERE studentId = ? AND equipment = ? AND status = 'PENDING'
      ORDER BY outTime ASC 
      LIMIT 1`,
@@ -278,7 +278,7 @@ app.post("/returnOne", (req, res) => {
       const newStatus = "RETURNED";
 
       db.query(
-        `UPDATE Sports 
+        `UPDATE SPORTS 
          SET inNum = ?, status = ?, inTime = ? 
          WHERE id = ?`,
         [newInNum, newStatus, returnTime, row.id],
@@ -312,7 +312,7 @@ app.post("/returnMany", (req, res) => {
 
   equipments.forEach((equipment) => {
     db.query(
-      `SELECT * FROM Sports 
+      `SELECT * FROM SPORTS 
        WHERE studentId = ? AND equipment = ? AND status = 'PENDING'
        ORDER BY outTime ASC 
        LIMIT 1`,
@@ -332,7 +332,7 @@ app.post("/returnMany", (req, res) => {
 
         const row = rows[0];
         db.query(
-          `UPDATE Sports 
+          `UPDATE SPORTS 
            SET inNum = ?, status = ?, inTime = ? 
            WHERE id = ?`,
           [row.outNum, "RETURNED", returnTime, row.id],
@@ -353,6 +353,15 @@ app.post("/returnMany", (req, res) => {
     );
   });
 });
+
+app.get('/team_landing', (req, res) => {
+  res.render('team_landing', {
+    activePage: 'team-landing',
+    // Add any other data your template needs
+  });
+});
+
+
 app.get("/logout", (req, res) => {
   req.session.destroy((err) => {
     if (err) {

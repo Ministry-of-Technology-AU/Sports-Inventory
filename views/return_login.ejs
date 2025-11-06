@@ -1,31 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Login</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="/style/index.css" />
-  </head>
-  <body>
-    <%- include("nav",{ activePage: "landing" }) %>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="/style/index.css" />
+</head>
+
+<body>
+  <%- include("nav",{ activePage: "landing" }) %>
     <div class="box">
-      <h1>Sports Inventory Management</h1>
+      <h1>Student Return</h1>
       <form action="/return_login" method="POST">
-        <input
-          type="text"
-          id="qrString"
-          name="qrString"
-          placeholder="Scan Your ID"
-          required
-        />
+        <input type="text" id="qrString" name="qrString" placeholder="Scan Your ID" required />
         <button type="submit">Submit</button>
       </form>
     </div>
-  </body>
+</body>
+
 </html>
