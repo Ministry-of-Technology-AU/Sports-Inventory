@@ -28,6 +28,10 @@ Start the app
 ```bash
   npm run dev
 ```
+or 
+```bash
+  node src/app4.js
+```
 
 
 ## Developers
