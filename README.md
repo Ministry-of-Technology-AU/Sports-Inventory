@@ -1,6 +1,20 @@
+
 # Sports Inventory Borrowing System   
 
-A brief description of what this project does and who it's for
+Project undertaken by the ministry to digitise the existing sports MPH infrastructure by replacing physical ID system with Ashoka QR code (similar to mailroom).
+
+
+
+
+
+
+## Features
+
+- QR code scanning
+- Borrow / Return equipment
+- Automatically sends confirmation email to borrower
+- Reminder emails sent for borrow past 24 hour limit
+- Easy-to-use and lightweight
 
 
 ## Run Locally
@@ -28,19 +42,16 @@ Start the app
 ```bash
   npm run dev
 ```
-or 
-```bash
-  node src/app4.js
-```
 
 
 ## Developers
 
- - [Soham Tulsyan](https://github.com/sohamtulsyan) [Deputy Minister]
- - [Vaani Goenka](https://github.com/vaaniGO) [Deputy Minister]
- - [Nitin S](https://github.com/28nitin07) [Project Lead]
- - [Atharvajeet Singh](https://github.com/atharvajeetsingh)
- - [Aditya Kanodia](https://github.com/aditya140108)
+ - [Vansh Bothra](https://github.com/vanshbothra) - Minister
+ - [Soham Tulsyan](https://github.com/sohamtulsyan) - Deputy Minister
+ - [Vaani Goenka](https://github.com/vaaniGO) - Deputy Minister
+ - [Nitin S](https://github.com/28nitin07) - Project Lead
+ - [Atharvajeet Singh](https://github.com/atharvajeetsingh) - Developer
+ - [Aditya Kanodia](https://github.com/aditya140108) - Developer
 
 
 
