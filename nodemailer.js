@@ -35,8 +35,18 @@ const pool = mysql.createPool({
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
   database: process.env.DB_NAME || "sportsinventory",
+  port: parseInt(process.env.DB_PORT) || 3306,
   waitForConnections: true,
   connectionLimit: 10,
+  connectTimeout: 30000,
+  // Railway MySQL 9.4.0 uses self-signed SSL certificates
+  ssl: process.env.DB_HOST?.includes('railway') || process.env.DB_HOST?.includes('rlwy.net') 
+    ? { 
+        rejectUnauthorized: false,  // Accept self-signed certs (required for Railway)
+        minVersion: 'TLSv1.2',
+        maxVersion: 'TLSv1.3'
+      }
+    : undefined
 });
 
 // ---------- Transporter (supports App Password or OAuth2) ----------
@@ -130,7 +140,11 @@ async function updateOverdueToLate() {
     `);
     logToFile(`   ✅ Updated ${result.affectedRows} record(s) to LATE`);
   } catch (err) {
-    logToFile(`❌ updateOverdueToLate error: ${err.message}`);
+    if (err.code === 'ETIMEDOUT' || err.code === 'ECONNREFUSED') {
+      logToFile(`❌ updateOverdueToLate error: Database connection timeout - Railway service may be paused`);
+    } else {
+      logToFile(`❌ updateOverdueToLate error: ${err.message}`);
+    }
   }
 }
 
@@ -212,7 +226,12 @@ async function emailLateBorrowers() {
       }
     }
   } catch (err) {
-    logToFile(`❌ emailLateBorrowers error: ${err.message}`);
+    if (err.code === 'ETIMEDOUT' || err.code === 'ECONNREFUSED') {
+      logToFile(`❌ emailLateBorrowers error: Database connection timeout - Railway service may be paused`);
+      logToFile(`💡 Tip: Visit https://railway.app to check if your MySQL service is active`);
+    } else {
+      logToFile(`❌ emailLateBorrowers error: ${err.message}`);
+    }
   }
 }
 
