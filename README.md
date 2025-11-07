@@ -1,4 +1,4 @@
-# Ashoka University Sports Inventory Borrowing System   
+# Sports Inventory Borrowing System   
 
 A brief description of what this project does and who it's for
 
