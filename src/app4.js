@@ -7,10 +7,10 @@ import fetch from "node-fetch";
 import dotenv from "dotenv";
 import session from "express-session";
 import { fileURLToPath } from "url";
+import passport from './passport-auth.js';
 
 console.log("Running");
 const app = express();
-const port = 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -20,6 +20,52 @@ dotenv.config({ path: path.join(__dirname, "../.env") });
 app.use("/style", express.static(path.join(__dirname, "../style")));
 app.use("/images", express.static(path.join(__dirname, "../images")));
 
+const port = process.env.PORT || 3000;
+// app.listen(port);
+
+// 1. Basic setup
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// 2. Session setup FIRST
+app.use(
+  session({
+    secret: "superSecretKey123",
+    resave: false,
+    saveUninitialized: false,
+    cookie: { maxAge: 1000 * 60 * 60 }
+  })
+);
+
+// 3. Then passport
+app.use(passport.initialize());
+app.use(passport.session());
+
+const publicPaths = [
+  '/auth/google',
+  '/auth/google/callback',
+  '/unauthorized',
+] // empty for now
+
+function ensureAuthenticated(req, res, next) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  req.session.returnTo = req.originalUrl;
+  res.redirect("/auth/google");
+}
+
+// Global authentication middleware
+app.use((req, res, next) => {
+  // Skip authentication for public paths
+  if (publicPaths && publicPaths.includes(req.path) || req.path.startsWith('/auth/')) {
+    return next();
+  }
+
+  // Apply authentication to all other paths
+  ensureAuthenticated(req, res, next);
+});
+// 5. Finally start the server
 app.listen(port);
 
 const dbConfig = {
@@ -43,17 +89,48 @@ const students = JSON.parse(
 
 app.set("views", path.join(__dirname, "../views"));
 
-//setting up session management
-app.use(
-  session({
-    secret: "superSecretKey123", // any random string (used to sign the session ID cookie)
-    resave: false, // don’t save session if nothing changed
-    saveUninitialized: false, // don’t create session until something stored
-    cookie: {
-      maxAge: 1000 * 60 * 60, // cookie valid for 1 hour (in ms)
-    },
-  })
+
+app.get(
+  "/auth/google",
+  passport.authenticate("google", { scope: ["profile", "email"] })
 );
+
+app.get(
+  "/auth/google/callback",
+  passport.authenticate("google", {
+    failureRedirect: "/unauthorized",
+    failureMessage: true
+  }),
+  (req, res) => {
+    // Log any failure messages from the authentication process
+    if (req.session.messages) {
+      console.error("Authentication failure:", req.session.messages);
+    }
+
+    const returnTo = req.session.returnTo || '/issue_login';
+    delete req.session.returnTo;
+    res.redirect(returnTo);
+  }
+);
+
+app.get("/logout", (req, res) => {
+  req.logout(function (err) {
+    if (err) {
+      return next(err); // Handle any errors during logout
+    }
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("Error destroying session:", err);
+      }
+      res.clearCookie("connect.sid"); // Clear the session cookie
+      res.redirect("/");
+    });
+  });
+});
+
+app.get("/unauthorized", (req, res) => {
+  res.render("error", { msg: "Unauthorized: Your email is not authorized to access this system." });
+});
 
 const BASE_URL = process.env.BASE_URL;
 
