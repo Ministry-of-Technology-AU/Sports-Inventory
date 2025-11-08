@@ -2,26 +2,34 @@
 import path from 'path'
 import { dirname } from 'path';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv'; // Load environment variables from a .env file
+import dotenv from 'dotenv';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-import passport from "passport"; // Passport for authentication
+import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 
-const allowedEmails = process.env.ALLOWED_EMAILS ? process.env.ALLOWED_EMAILS : []; // Allowed email addresses for authentication
-// console.log(process.env.ALLOWED_EMAILS);
+// FIX: Properly parse the comma-separated email list
+const allowedEmails = process.env.ALLOWED_EMAILS
+    ? process.env.ALLOWED_EMAILS.split(',').map(email => email.trim())
+    : [];
+
+console.log('Allowed emails configured:', allowedEmails); // Debug log
+
 // Configure Google OAuth 2.0 strategy for Passport.js
 passport.use(
     new GoogleStrategy(
         {
-            clientID: process.env.CLIENT_ID, // Google OAuth client ID
-            clientSecret: process.env.CLIENT_SECRET, // Google OAuth client secret
-            callbackURL: process.env.CALLBACK_URL, // Callback URL after Google authentication
+            clientID: process.env.CLIENT_ID,
+            clientSecret: process.env.CLIENT_SECRET,
+            callbackURL: process.env.CALLBACK_URL,
         },
         (accessToken, refreshToken, profile, done) => {
             const email = profile.emails && profile.emails[0] ? profile.emails[0].value : null;
+
+            console.log('Attempting authentication for:', email); // Debug log
 
             if (!email) {
                 console.log('No email found in profile');
@@ -29,20 +37,34 @@ passport.use(
             }
 
             if (!allowedEmails.includes(email)) {
-                console.log('Email not authorized', email);
+                console.log('Email not authorized:', email);
+                console.log('Allowed emails are:', allowedEmails); // Debug log
                 return done(null, false, { message: 'Email not authorized' });
             }
 
-            return done(null, profile); // Store the user's profile data
+            console.log('Email authorized, creating session for:', email); // Debug log
+
+            // Create a cleaner user object
+            const user = {
+                id: profile.id,
+                email: email,
+                name: profile.displayName,
+                picture: profile.photos && profile.photos[0] ? profile.photos[0].value : null
+            };
+
+            return done(null, user);
         }
     )
 );
 
 // Serialize and deserialize user information for Passport.js
 passport.serializeUser((user, done) => {
+    console.log('Serializing user:', user.email); // Debug log
     done(null, user);
 });
+
 passport.deserializeUser((user, done) => {
+    console.log('Deserializing user:', user.email); // Debug log
     done(null, user);
 });
 

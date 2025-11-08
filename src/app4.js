@@ -8,6 +8,7 @@ import dotenv from "dotenv";
 import session from "express-session";
 import { fileURLToPath } from "url";
 import passport from './passport-auth.js';
+import MySQLStore from 'express-mysql-session';
 
 console.log("Running");
 const app = express();
@@ -23,51 +24,6 @@ app.use("/images", express.static(path.join(__dirname, "../images")));
 const port = process.env.PORT || 3000;
 // app.listen(port);
 
-// 1. Basic setup
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// 2. Session setup FIRST
-app.use(
-  session({
-    secret: "superSecretKey123",
-    resave: false,
-    saveUninitialized: false,
-    cookie: { maxAge: 1000 * 60 * 60 }
-  })
-);
-
-// 3. Then passport
-app.use(passport.initialize());
-app.use(passport.session());
-
-const publicPaths = [
-  '/auth/google',
-  '/auth/google/callback',
-  '/unauthorized',
-] // empty for now
-
-function ensureAuthenticated(req, res, next) {
-  if (req.isAuthenticated()) {
-    return next();
-  }
-  req.session.returnTo = req.originalUrl;
-  res.redirect("/auth/google");
-}
-
-// Global authentication middleware
-app.use((req, res, next) => {
-  // Skip authentication for public paths
-  if (publicPaths && publicPaths.includes(req.path) || req.path.startsWith('/auth/')) {
-    return next();
-  }
-
-  // Apply authentication to all other paths
-  ensureAuthenticated(req, res, next);
-});
-// 5. Finally start the server
-app.listen(port);
-
 const dbConfig = {
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -77,17 +33,92 @@ const dbConfig = {
 };
 
 const db = mysql.createConnection(dbConfig);
+
+
+const MySQLStoreSession = MySQLStore(session);
+const sessionStoreOptions = {
+  // Use the same database connection that you've already established
+  ...dbConfig,
+  // Table configuration
+  schema: {
+    tableName: 'sessions',
+    columnNames: {
+      session_id: 'session_id',
+      expires: 'expires',
+      data: 'data'
+    }
+  },
+  // Session expiration time (in milliseconds)
+  expiration: 7 * 24 * 60 * 60 * 1000, // 1 week
+  // How frequently expired sessions will be cleared; defaults to 15 minutes
+  checkExpirationInterval: 15 * 60 * 1000, // 15 minutes
+  // Whether or not to create the sessions table automatically if it doesn't exist
+  createDatabaseTable: true,
+};
+
+// 1. Basic setup
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const sessionStore = new MySQLStoreSession(sessionStoreOptions);
+
+
+const publicPaths = [
+  '/auth/google',
+  '/auth/google/callback',
+  '/unauthorized',
+] // empty for now
+
+
+
+app.use(session({
+  key: 'mailroom_sid',
+  secret: process.env.SECRET_KEY || 'your_session_secret',
+  store: sessionStore,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    // secure: process.env.NODE_ENV === 'production', // Set to true in production when using HTTPS
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 1 week
+  }
+}));
+
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+
+
+// Global authentication middleware
+app.use((req, res, next) => {
+  // Skip authentication for public paths
+  if (publicPaths && publicPaths.includes(req.path) || req.path.startsWith('/auth/')) {
+    return next();
+  }
+  // Apply authentication to all other paths
+  ensureAuthenticated(req, res, next);
+});
+
+function ensureAuthenticated(req, res, next) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  req.session.returnTo = req.originalUrl;
+  res.redirect("/auth/google");
+}
+
+app.set("views", path.join(__dirname, "../views"));
 app.set("view engine", "ejs");
+
+
+app.listen(port);
+
 
 // Fix students.json path
 const students = JSON.parse(
   fs.readFileSync(path.join(__dirname, "../students.json"), "utf-8")
 );
 
-app.set("views", path.join(__dirname, "../views"));
 
 
 app.get(
@@ -135,17 +166,11 @@ app.get("/unauthorized", (req, res) => {
 const BASE_URL = process.env.BASE_URL;
 
 app.get("/", (req, res) => {
-  req.session.destroy((err) => {
-    if (err) {
-      console.error("Error destroying session:", err);
-    }
-  });
   res.render("issue_login", {
     activePage: "issue",
   });
 });
 app.get("/issue_login", (req, res) => {
-  req.session.destroy(() => { });
   res.render("issue_login", {
     activePage: "issue", // highlight Issue page in navbar
   });
@@ -266,7 +291,6 @@ app.post("/issue", (req, res) => {
   });
 });
 app.get("/return_login", (req, res) => {
-  req.session.destroy(() => { });
   res.render("return_login", {
     activePage: "landing", // highlight Landing/Return page
   });
@@ -436,14 +460,4 @@ app.get('/team_landing', (req, res) => {
     activePage: 'team-landing',
     // Add any other data your template needs
   });
-});
-
-
-app.get("/logout", (req, res) => {
-  req.session.destroy((err) => {
-    if (err) {
-      console.error("Error destroying session:", err);
-    }
-  });
-  res.redirect("/");
 });
