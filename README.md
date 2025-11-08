@@ -65,7 +65,3 @@ Start the app
 ![App Screenshot](https://via.placeholder.com/468x300?text=App+Screenshot+Here)
 
 
-## License
-
-[GNU GPL v3.0](https://choosealicense.com/licenses/gpl-3.0/#)
-
