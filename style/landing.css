@@ -1,25 +1,23 @@
 * {
   font-family: "nunito", sans-serif;
+  --red: #8f1b1b;
 }
-
 body {
   background-color: white;
 }
-
 .box {
   background-color: #0d3862;
   width: 80%;
   height: 75vh;
   padding: 20px;
   border: solid #000000 1px;
-  margin: 50px auto;
+  margin: 30px auto;
   text-align: center;
   display: flex;
   flex-direction: column;
   justify-content: space-around;
   color: white;
 }
-
 .up {
   display: flex;
   flex-direction: row;
@@ -59,7 +57,6 @@ th {
   background-color: #8f1b1b;
   color: white;
   height: 40px;
-  padding: 10px;
 }
 
 td {
@@ -110,12 +107,13 @@ td:last-child {
 .bottom p {
   display: inline;
   color: #3b0800;
+  font-size: 20px;
 }
 
 .bottom a,
 .bottom button {
   text-decoration: none;
-  background-color: #1C1917;
+  background-color: #1c1917;
   padding: 7.5px 15px;
   border-radius: 30px;
   border: none;
@@ -137,7 +135,7 @@ td:last-child {
   padding: 6px 14px;
   border-radius: 6px;
   border: none;
-  background: var(--red);
+  background-color: #8f1b1b;
   color: white;
   font-weight: 600;
   cursor: pointer;
@@ -145,8 +143,6 @@ td:last-child {
   width: 150px;
   text-align: center;
   align-self: flex-end;
-  background-color: #8f1b1b;
-  color: white;
   margin-right: 10%;
 }
 
@@ -154,13 +150,12 @@ td:last-child {
   opacity: 0.85;
 }
 
-
 #returnSelectedBtn {
   margin-bottom: 10px;
   padding: 6px 14px;
   border-radius: 6px;
   border: none;
-  background: var(--red);
+  background-color: #8f1b1b;
   color: white;
   font-weight: 600;
   cursor: pointer;
@@ -168,8 +163,6 @@ td:last-child {
   width: 150px;
   text-align: center;
   align-self: flex-end;
-  background-color: #8f1b1b;
-  color: white;
   margin-right: 10%;
 }
 
