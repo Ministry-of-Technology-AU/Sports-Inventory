@@ -22,7 +22,6 @@ app.use("/style", express.static(path.join(__dirname, "../style")));
 app.use("/images", express.static(path.join(__dirname, "../images")));
 
 const port = process.env.PORT || 3000;
-// app.listen(port);
 
 const dbConfig = {
   host: process.env.DB_HOST,
@@ -34,12 +33,9 @@ const dbConfig = {
 
 const db = mysql.createConnection(dbConfig);
 
-
 const MySQLStoreSession = MySQLStore(session);
 const sessionStoreOptions = {
-  // Use the same database connection that you've already established
   ...dbConfig,
-  // Table configuration
   schema: {
     tableName: 'sessions',
     columnNames: {
@@ -48,28 +44,16 @@ const sessionStoreOptions = {
       data: 'data'
     }
   },
-  // Session expiration time (in milliseconds)
   expiration: 7 * 24 * 60 * 60 * 1000, // 1 week
-  // How frequently expired sessions will be cleared; defaults to 15 minutes
   checkExpirationInterval: 15 * 60 * 1000, // 15 minutes
-  // Whether or not to create the sessions table automatically if it doesn't exist
   createDatabaseTable: true,
 };
 
-// 1. Basic setup
+// 1. Basic setup - ORDER MATTERS!
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const sessionStore = new MySQLStoreSession(sessionStoreOptions);
-
-
-const publicPaths = [
-  '/auth/google',
-  '/auth/google/callback',
-  '/unauthorized',
-] // empty for now
-
-
 
 app.use(session({
   key: 'mailroom_sid',
@@ -83,51 +67,25 @@ app.use(session({
   }
 }));
 
-
 app.use(passport.initialize());
 app.use(passport.session());
 
-
-
-// Global authentication middleware
-app.use((req, res, next) => {
-  // Skip authentication for public paths
-  if (publicPaths && publicPaths.includes(req.path) || req.path.startsWith('/auth/')) {
-    return next();
-  }
-  // Apply authentication to all other paths
-  ensureAuthenticated(req, res, next);
-});
-
-function ensureAuthenticated(req, res, next) {
-  if (req.isAuthenticated()) {
-    return next();
-  }
-  req.session.returnTo = req.originalUrl;
-  res.redirect("/auth/google");
-}
-
 app.set("views", path.join(__dirname, "../views"));
 app.set("view engine", "ejs");
-
-
-app.listen(port);
-
 
 // Fix students.json path
 const students = JSON.parse(
   fs.readFileSync(path.join(__dirname, "../students.json"), "utf-8")
 );
 
+// PUBLIC ROUTES FIRST - Define these BEFORE authentication middleware
 
-
-app.get(
-  "/auth/google",
+// Auth routes
+app.get("/auth/google",
   passport.authenticate("google", { scope: ["profile", "email"] })
 );
 
-app.get(
-  "/auth/google/callback",
+app.get("/auth/google/callback",
   passport.authenticate("google", {
     failureRedirect: "/unauthorized",
     failureMessage: true
@@ -147,13 +105,13 @@ app.get(
 app.get("/logout", (req, res) => {
   req.logout(function (err) {
     if (err) {
-      return next(err); // Handle any errors during logout
+      return next(err);
     }
     req.session.destroy((err) => {
       if (err) {
         console.error("Error destroying session:", err);
       }
-      res.clearCookie("connect.sid"); // Clear the session cookie
+      res.clearCookie("mailroom_sid"); // Use the same key as in session config
       res.redirect("/");
     });
   });
@@ -163,6 +121,19 @@ app.get("/unauthorized", (req, res) => {
   res.render("error", { msg: "Unauthorized: Your email is not authorized to access this system." });
 });
 
+// AUTHENTICATION MIDDLEWARE - Applied to all routes below this point
+function ensureAuthenticated(req, res, next) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  req.session.returnTo = req.originalUrl;
+  res.redirect("/auth/google");
+}
+
+app.use(ensureAuthenticated);
+
+// PROTECTED ROUTES - All routes below require authentication
+
 const BASE_URL = process.env.BASE_URL;
 
 app.get("/", (req, res) => {
@@ -170,13 +141,15 @@ app.get("/", (req, res) => {
     activePage: "issue",
   });
 });
+
 app.get("/issue_login", (req, res) => {
   res.render("issue_login", {
-    activePage: "issue", // highlight Issue page in navbar
+    activePage: "issue",
   });
 });
+
 app.post("/issue_login", (req, res) => {
-  const ashokaId = req.body.qrString?.trim(); // note your input is named qrString
+  const ashokaId = req.body.qrString?.trim();
   const studentData = students.find(
     (s) => String(s.AshokaId).trim() === ashokaId
   );
@@ -184,14 +157,14 @@ app.post("/issue_login", (req, res) => {
   if (!studentData) return res.status(404).send("Student not found");
   console.log("Student Data:", studentData);
   req.session.student = studentData;
-  res.redirect("/issue"); // GET /issue will set activePage
+  res.redirect("/issue");
 });
+
 app.get("/issue", (req, res) => {
   if (!req.session.student) {
     return res.redirect("/");
   }
 
-  //prettier-ignore
   const totalItems = {
     "Badminton Racquet": 20,
     "Table Tennis Racquet": 15,
@@ -208,7 +181,6 @@ app.get("/issue", (req, res) => {
     "Chess": 3,
     "Cricket Bat": 4,
     "Frisbee": 4,
-
   };
 
   db.query(
@@ -222,13 +194,11 @@ app.get("/issue", (req, res) => {
         return res.status(500).send("Database error");
       }
 
-      // Transform DB result into an object
       const issuedItems = {};
       results.forEach((row) => {
         issuedItems[row.equipment] = row.totalIssued;
       });
 
-      // Calculate available items
       const availableItems = {};
       for (const equipment in totalItems) {
         availableItems[equipment] =
@@ -236,7 +206,6 @@ app.get("/issue", (req, res) => {
       }
       console.log("Available Items:", availableItems);
 
-      // Render page inside the callback
       res.render("issue", {
         student: req.session.student,
         availableItems: availableItems,
@@ -245,18 +214,16 @@ app.get("/issue", (req, res) => {
     }
   );
 });
+
 app.post("/issue", (req, res) => {
   const outTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
-
   const quantity = req.body.quantity || {};
 
-  // Filter equipment with non-zero quantity
   const equipmentList = Object.keys(quantity).filter(
     (item) => Number(quantity[item]) > 0
   );
 
   if (equipmentList.length === 0) {
-    x;
     return res.redirect("/landing");
   }
 
@@ -266,7 +233,6 @@ app.post("/issue", (req, res) => {
   equipmentList.forEach((item) => {
     const qtyToIssue = Number(quantity[item]);
 
-    // Insert a new row for each issue
     db.query(
       "INSERT INTO SPORTS (studentId, name, equipment, outNum, outTime, status, inNum) VALUES (?, ?, ?, ?, ?, 'PENDING', 0)",
       [
@@ -284,15 +250,16 @@ app.post("/issue", (req, res) => {
         }
         completed++;
         if (completed === equipmentList.length && !hasError) {
-          res.redirect("/landing"); //made the change right here from app2.js
+          res.redirect("/landing");
         }
       }
     );
   });
 });
+
 app.get("/return_login", (req, res) => {
   res.render("return_login", {
-    activePage: "landing", // highlight Landing/Return page
+    activePage: "landing",
   });
 });
 
@@ -305,37 +272,35 @@ app.post("/return_login", (req, res) => {
   if (!studentData) return res.status(404).send("Student not found");
 
   req.session.student = studentData;
-  res.redirect("/landing"); // GET /landing will set activePage
+  res.redirect("/landing");
 });
+
 app.get("/landing", (req, res) => {
-  // If you have AshokaId in session, use it; otherwise, redirect to login
-  // Render a form that auto-submits AshokaId to POST /landing
   if (!req.session.student) {
-    return res.redirect("/return_login"); // redirect if no student session
+    return res.redirect("/return_login");
   }
   res.render("landing_redirect", {
     ashokaId: req.session.student.AshokaId,
     activePage: "landing",
   });
 });
+
 app.post("/landing", async (req, res) => {
-  // var processedQr = processQr(req.body.qrString);
-  // if (processedQr.isValid) {
   const ashokaId = String(req.body.qrString).trim();
   const studentData = students.find((student) => {
     return String(student.AshokaId).trim() === String(ashokaId).trim();
   });
-  // });
+
   if (!studentData) {
     return res.status(404).send("Student not found");
   }
-  req.session.student = studentData; // store in session
+  req.session.student = studentData;
+
   db.query(
     "SELECT studentId, name, equipment, outNum, inNum, status, outTime, inTime FROM SPORTS WHERE studentId = ? AND status = 'PENDING'",
     [ashokaId],
     (err, results) => {
       if (err) return res.status(500).send("Database error");
-      // Format outTime before sending to EJS
       results.forEach((r) => {
         r.outTime = moment(r.outTime)
           .tz("Asia/Kolkata")
@@ -344,10 +309,8 @@ app.post("/landing", async (req, res) => {
       res.render("landing", { student: studentData, equipment: results });
     }
   );
-  // } else {
-  //   res.status(400).send("Invalid QR");
-  // }
-}); // <-- Add this closing brace
+});
+
 app.post("/returnOne", (req, res) => {
   if (!req.session.student) {
     return res.status(401).json({ success: false, error: "Not logged in" });
@@ -357,7 +320,6 @@ app.post("/returnOne", (req, res) => {
   const studentId = req.session.student.AshokaId;
   const returnTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 
-  // Fetch the oldest pending row for that equipment
   db.query(
     `SELECT * FROM SPORTS 
      WHERE studentId = ? AND equipment = ? AND status = 'PENDING'
@@ -375,7 +337,7 @@ app.post("/returnOne", (req, res) => {
       }
 
       const row = rows[0];
-      const newInNum = row.outNum; // returning all at once
+      const newInNum = row.outNum;
       const newStatus = "RETURNED";
 
       db.query(
@@ -395,6 +357,7 @@ app.post("/returnOne", (req, res) => {
     }
   );
 });
+
 app.post("/returnMany", (req, res) => {
   if (!req.session.student) {
     return res.status(401).json({ success: false, error: "Not logged in" });
@@ -458,6 +421,9 @@ app.post("/returnMany", (req, res) => {
 app.get('/team_landing', (req, res) => {
   res.render('team_landing', {
     activePage: 'team-landing',
-    // Add any other data your template needs
   });
+});
+
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });

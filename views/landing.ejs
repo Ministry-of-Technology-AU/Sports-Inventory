@@ -38,49 +38,51 @@
       <% if (equipment.length===0) { %>
         <p class="noPendingEquipment">No pending equipment</p>
         <% } else { %>
-          <table border="1" cellpadding="5">
-            <thead>
-              <tr>
-                <th>Equipment</th>
-                <th>Quantity Borrowed</th>
-                <th>Checkout Time</th>
-                <th>Return</th>
-              </tr>
-            </thead>
-            <tbody>
-              <% equipment.forEach(function(item) { %>
+          <button id="selectAllBtn" class="select-all-btn">Select All</button>
+          <div class="table-container">
+            <table border="1" cellpadding="5">
+              <thead>
                 <tr>
-                  <td>
-                    <%= item.equipment %>
-                  </td>
-                  <td>
-                    <%= item.outNum %>
-                  </td>
-                  <td>
-                    <%= item.outTime %>
-                  </td>
-                  <td>
-                    <div class="checkbox">
-                      <input class="equipment-checkbox" type="checkbox" value="<%= item.equipment %>" />
-                      <span class="checkmark"></span>
-                    </div>
-                  </td>
+                  <th>Equipment</th>
+                  <th>Quantity</th>
+                  <th>Checkout Time</th>
+                  <th>Return</th>
                 </tr>
-                <% }); %>
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                <% equipment.forEach(function(item) { %>
+                  <tr>
+                    <td>
+                      <%= item.equipment %>
+                    </td>
+                    <td>
+                      <%= item.outNum %>
+                    </td>
+                    <td>
+                      <%= item.outTime %>
+                    </td>
+                    <td>
+                      <div class="checkbox">
+                        <input class="equipment-checkbox" type="checkbox" value="<%= item.equipment %>" />
+                        <span class="checkmark"></span>
+                      </div>
+                    </td>
+                  </tr>
+                  <% }); %>
+              </tbody>
+            </table>
+          </div>
 
-          <br />
-          <% } %>
+          <!-- <p>Technology Ministry of Ashoka</p> -->
+          <% if (equipment.length !=0) { %>
+            <button id="returnSelectedBtn">Return Selected</button>
+            <% }%>
 
-            <div class="bottom">
-              <!-- <p>Technology Ministry of Ashoka</p> -->
-              <% if (equipment.length !=0) { %>
-                <p class="noPendingEquipment">
-                  <button id="returnSelectedBtn">Return Selected</button>
-                </p>
-                <% }%>
-            </div>
+              <br />
+              <% } %>
+
+                <div class="bottom">
+                </div>
     </div>
 
     <!-- ✅ Script for multiple return without form -->
@@ -116,6 +118,18 @@
             alert("Network error: " + err.message);
           }
         });
+
+      // ✅ Select All / Deselect All
+      document.getElementById("selectAllBtn")?.addEventListener("click", () => {
+        const checkboxes = document.querySelectorAll(".equipment-checkbox");
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+
+        checkboxes.forEach(cb => cb.checked = !allChecked);
+
+        // Change button text based on state
+        document.getElementById("selectAllBtn").textContent = allChecked ? "Select All" : "Remove All";
+      });
+
     </script>
 </body>
 
