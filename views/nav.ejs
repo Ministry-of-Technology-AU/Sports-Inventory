@@ -1,32 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Document</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="/style/nav.css" />
-  </head>
-  <body>
-    <nav>
-      <p>Sports MPH Equipment Issue</p>
-      <div class="pages">
-        <a
-          href="/issue_login"
-          class="<%= activePage === 'issue' ? 'active' : '' %>"
-          >Issue</a
-        >
-        <a
-          href="/return_login"
-          class="<%= activePage === 'landing' ? 'active' : '' %>"
-          >Return</a
-        >
-      </div>
-    </nav>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Document</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="/style/nav.css" />
+</head>
+
+<body>
+  <nav>
+    <p>Sports MPH</p>
+    <div class="pages">
+      <a href="/team_landing" class="<%= activePage === 'team-landing' ? 'active' : '' %>">Sports Team Issue</a>
+      <a href="/issue_login" class="<%= activePage === 'issue' ? 'active' : '' %>">Issue</a>
+      <a href="/return_login" class="<%= activePage === 'landing' ? 'active' : '' %>">Return</a>
+    </div>
+  </nav>
+</body>
+
 </html>

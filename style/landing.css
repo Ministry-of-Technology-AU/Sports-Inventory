@@ -23,11 +23,13 @@ body {
   justify-content: space-between;
   align-items: center;
 }
+
 .details {
   text-align: left;
   width: 20%;
   font-size: 20px;
 }
+
 .fake {
   visibility: hidden;
   width: 20%;
@@ -35,11 +37,24 @@ body {
 .noPendingEquipment {
   color: white;
   font-size: 30px;
+
+.noPendingEquipment {
+  color: white;
+  font-size: 30px;
 }
+
+.table-container {
+  display: flex;
+  justify-content: center;
+}
+
 table {
   border-collapse: collapse;
   border: white 1px solid;
+  margin: 0 auto;
+  width: 80%;
 }
+
 th {
   background-color: #8f1b1b;
   color: white;
@@ -49,32 +64,52 @@ td {
   padding: 0;
   margin: 0;
   height: 40px;
+  padding: 10px;
 }
+
+td {
+  padding: 10px;
+  margin: 0;
+  height: 40px;
+  text-align: center;
+  vertical-align: middle;
+  background-color: white;
+}
+
 /* Container label */
 .checkbox {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  font-size: 18px;
   cursor: pointer;
+  position: relative;
 }
 
-/* Hide the real checkbox */
-.checkbox input {
-  position: absolute;
-  opacity: 0;
-  cursor: pointer;
+td:last-child {
+  display: flex;
+  justify-content: center;
 }
 
-/* Custom checkmark box */
-.checkmark {
-  width: 30px;
-  height: 30px;
-  background-color: #eee;
-  border: 2px solid #555;
-  border-radius: 4px;
-  transition: all 0.2s ease;
+.links {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+}
+
+.links a {
+  padding: 10px 20px;
+  background-color: #8f1b1b;
+  text-decoration: none;
+  color: white;
+  border: none;
+  border-radius: 30px;
+}
+
+.bottom {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
 }
 
 input[type="checkbox"] {
@@ -114,4 +149,73 @@ input[type="checkbox"]:checked + .checkmark {
 }
 .bottomBtn:hover {
   cursor: pointer;
+}
+.bottom p {
+  display: inline;
+  color: #3b0800;
+}
+
+.bottom a,
+.bottom button {
+  text-decoration: none;
+  background-color: #1C1917;
+  padding: 7.5px 15px;
+  border-radius: 30px;
+  border: none;
+  color: white;
+  font-size: 16px;
+}
+
+.bottom a:hover,
+.bottom button:hover {
+  cursor: pointer;
+}
+
+.bottom a:visited {
+  color: white;
+}
+
+.select-all-btn {
+  margin-bottom: 10px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  background: var(--red);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+  width: 150px;
+  text-align: center;
+  align-self: flex-end;
+  background-color: #8f1b1b;
+  color: white;
+  margin-right: 10%;
+}
+
+.select-all-btn:hover {
+  opacity: 0.85;
+}
+
+
+#returnSelectedBtn {
+  margin-bottom: 10px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  background: var(--red);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.2s;
+  width: 150px;
+  text-align: center;
+  align-self: flex-end;
+  background-color: #8f1b1b;
+  color: white;
+  margin-right: 10%;
+}
+
+#returnSelectedBtn:hover {
+  background-color: #a62020;
 }
