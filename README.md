@@ -36,6 +36,10 @@ Install dependencies
 ```bash
   npm install mysql2 nodemailer dotenv node-cron moment-timezone
 ```
+and
+```bash
+  npm i nodemon
+```
 
 Start the app
 
