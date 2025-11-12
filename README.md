@@ -40,7 +40,13 @@ Install dependencies
 Start the app
 
 ```bash
-  npm run dev
+  nodemon src/app4.js
+```
+
+or 
+
+```bash
+  npm run dev 
 ```
 
 
