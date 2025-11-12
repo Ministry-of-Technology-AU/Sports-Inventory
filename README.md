@@ -38,7 +38,7 @@ Install dependencies
 ```
 and
 ```bash
-  npm i nodemon
+  npm install -g nodemon # or using yarn: yarn global add nodemon
 ```
 
 Start the app
