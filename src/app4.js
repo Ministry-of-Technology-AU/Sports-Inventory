@@ -203,14 +203,14 @@ const BASE_URL = process.env.BASE_URL;
 app.get("/", (req, res) => {
   res.render("issue_login", {
     activePage: "issue",
-    user: req.user.name
+    user: req.user?.name || "Guest"
   });
 });
 
 app.get("/issue_login", (req, res) => {
   res.render("issue_login", {
     activePage: "issue",
-    user: req.user.name
+    user: req.user?.name || "Guest"
   });
 });
 
@@ -276,7 +276,7 @@ app.get("/issue", (req, res) => {
         student: req.session.student,
         availableItems: availableItems,
         activePage: "issue",
-        user: req.user.name
+        user: req.user?.name || "Guest"
       });
     }
   );
@@ -327,7 +327,7 @@ app.post("/issue", (req, res) => {
 app.get("/return_login", (req, res) => {
   res.render("return_login", {
     activePage: "landing",
-    user: req.user.name
+    user: req.user?.name || "Guest"
   });
 });
 
@@ -350,7 +350,7 @@ app.get("/landing", (req, res) => {
   res.render("landing_redirect", {
     ashokaId: req.session.student.AshokaId,
     activePage: "landing",
-    user: req.user.name
+    user: req.user?.name || "Guest"
   });
 });
 
@@ -380,7 +380,7 @@ app.post("/landing", async (req, res) => {
       res.render("landing", {
         student: studentData,
         equipment: results,
-        user: req.user.name
+        user: req.user?.name || "Guest"
       });
     }
   );
@@ -433,19 +433,18 @@ app.post("/returnOne", (req, res) => {
   );
 });
 
-app.post('/getequipment', async (req, res) => {
-  try {
-    const [rows] = await db.query('SELECT equipment FROM Equipment');
+app.post('/getequipment', (req, res) => {
+  db.query('SELECT equipment FROM Equipment', (err, rows) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
 
     const equipmentList = rows.map(row => row.equipment);
     console.log("Equipment List:", equipmentList);
 
     res.json({ equipment: equipmentList });
-
-  } catch (err) {
-    console.error("Database error:", err);
-    res.status(500).json({ error: "Database error" });
-  }
+  });
 });
 
 app.post("/returnMany", (req, res) => {
@@ -587,7 +586,7 @@ app.post('/update_inventory', (req, res) => {
 app.get('/team_landing', (req, res) => {
   res.render('team_landing', {
     activePage: 'team-landing',
-    user: req.user.name
+    user: req.user?.name || "Guest"
   });
 });
 
@@ -619,7 +618,7 @@ app.get('/admin', (req, res) => {
 app.get('/statistics', (req, res) => {
   res.render('dashboard', {
     activePage: 'statistics',
-    user: req.user.name
+    user: req.user?.name || "Guest"
   });
 });
 
