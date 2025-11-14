@@ -28,10 +28,68 @@ const dbConfig = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  port: process.env.DB_PORT,
+  port: parseInt(process.env.DB_PORT) || 3306,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  connectTimeout: 30000, // 30 seconds for Railway
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
+  // Railway MySQL 9.4.0 uses self-signed SSL certificates
+  // Must set rejectUnauthorized: false to accept them
+  ssl: process.env.DB_HOST?.includes('railway') || process.env.DB_HOST?.includes('rlwy.net') 
+    ? { 
+        rejectUnauthorized: false,  // Accept self-signed certs
+        minVersion: 'TLSv1.2',      // MySQL 9.4.0 requirement
+        maxVersion: 'TLSv1.3'       // Support latest TLS
+      }
+    : undefined
 };
 
-const db = mysql.createConnection(dbConfig);
+console.log("Creating Railway MySQL connection pool...");
+const db = mysql.createPool(dbConfig);
+
+// Test connection on startup with retry logic
+async function testDatabaseConnection(retries = 3, delay = 2000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const connection = await new Promise((resolve, reject) => {
+        db.getConnection((err, conn) => {
+          if (err) reject(err);
+          else resolve(conn);
+        });
+      });
+      
+      console.log("✅ Connected to Railway MySQL database with connection pool");
+      connection.release();
+      return true;
+    } catch (err) {
+      console.error(`❌ Database connection attempt ${attempt}/${retries} failed:`, err.message);
+      
+      if (attempt === retries) {
+        console.error("Connection details:", {
+          host: dbConfig.host,
+          user: dbConfig.user,
+          database: dbConfig.database,
+          port: dbConfig.port,
+          ssl: dbConfig.ssl ? 'enabled' : 'disabled'
+        });
+        console.warn("⚠️ App will continue but database operations may fail");
+        console.warn("💡 Tip: Check if your Railway MySQL service is active and not paused");
+        return false;
+      }
+      
+      console.log(`⏳ Retrying in ${delay/1000} seconds...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2; // Exponential backoff
+    }
+  }
+}
+
+// Start connection test
+testDatabaseConnection();
+
+app.set("view engine", "ejs");
 
 const MySQLStoreSession = MySQLStore(session);
 const sessionStoreOptions = {
@@ -93,8 +151,6 @@ function ensureAuthenticated(req, res, next) {
 
 app.set("views", path.join(__dirname, "../views"));
 app.set("view engine", "ejs");
-
-app.listen(port);
 
 // Fix students.json path
 const students = JSON.parse(
