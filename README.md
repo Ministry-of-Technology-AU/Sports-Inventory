@@ -36,6 +36,13 @@ Install dependencies
 ```bash
   npm install mysql2 nodemailer dotenv node-cron moment-timezone
 ```
+<<<<<<< HEAD
+=======
+and
+```bash
+  npm i nodemon
+```
+>>>>>>> parent of acc3ebe (Update README.md)
 
 Start the app
 

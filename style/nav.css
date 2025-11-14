@@ -1,51 +1,101 @@
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  font-family: "nunitio", sans-serif;
-}
-
 nav {
-  background-color: #c4122f;
-  overflow: hidden;
+  background: var(--secondary-color);
+  padding: 20px 40px;
+  border-radius: 12px;
+  margin-bottom: 30px;
+  box-shadow: 0 4px 12px rgba(13, 56, 98, 0.2);
   display: flex;
   justify-content: space-between;
-  height: 100px;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
 }
 
 nav p {
-  font-size: 30px;
-  color: white;
-  margin-left: 40px;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-color-secondary);
+  margin: 0;
 }
 
 .pages {
-  margin-right: 20px;
-}
-
-nav a {
-  color: white;
-  padding: 5px;
-  text-align: center;
-  text-decoration: none;
-  font-size: 17px;
-}
-
-nav a:visited {
-  color: white;
-  text-decoration: none;
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
 }
 
 .pages a {
-  opacity: 0.5;
+  color: var(--text-color-secondary);
+  text-decoration: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.pages a:hover {
+  background: var(--primary-color);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(196, 18, 47, 0.3);
 }
 
 .pages a.active {
-  color: #fff;
-  font-weight: bold;
-  background-color: var(--secondary-color);
-  padding: 20px;
-  border-radius: 1rem;
-  opacity: 1;
+  background: var(--primary-color);
+  box-shadow: 0 4px 8px rgba(196, 18, 47, 0.3);
+}
+
+@media (max-width: 768px) {
+  nav {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 20px;
+  }
+
+  nav p {
+    font-size: 24px;
+  }
+
+  .pages {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .pages a {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* User info container */
+[section="user-info"] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.851);
+  padding: 8px 14px;
+  border-radius: 8px;
+}
+
+/* User icon styling */
+[section="user-icon"] i {
+  font-size: 20px;
+  background: var(--primary-color);
+  color: white;
+  border-radius: 50%;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* User name text */
+[section="user-name"] p {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-color-secondary);
+  white-space: nowrap;
+  color: black;
 }

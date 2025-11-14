@@ -49,11 +49,17 @@ const sessionStoreOptions = {
   createDatabaseTable: true,
 };
 
-// 1. Basic setup - ORDER MATTERS!
+// Basic setup
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const sessionStore = new MySQLStoreSession(sessionStoreOptions);
+
+const publicPaths = [
+  '/auth/google',
+  '/auth/google/callback',
+  '/unauthorized',
+];
 
 app.use(session({
   key: 'mailroom_sid',
@@ -62,7 +68,6 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    // secure: process.env.NODE_ENV === 'production', // Set to true in production when using HTTPS
     maxAge: 7 * 24 * 60 * 60 * 1000 // 1 week
   }
 }));
@@ -70,28 +75,44 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Global authentication middleware
+app.use((req, res, next) => {
+  if (publicPaths && publicPaths.includes(req.path) || req.path.startsWith('/auth/')) {
+    return next();
+  }
+  ensureAuthenticated(req, res, next);
+});
+
+function ensureAuthenticated(req, res, next) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  req.session.returnTo = req.originalUrl;
+  res.redirect("/auth/google");
+}
+
 app.set("views", path.join(__dirname, "../views"));
 app.set("view engine", "ejs");
+
+app.listen(port);
 
 // Fix students.json path
 const students = JSON.parse(
   fs.readFileSync(path.join(__dirname, "../students.json"), "utf-8")
 );
 
-// PUBLIC ROUTES FIRST - Define these BEFORE authentication middleware
-
-// Auth routes
-app.get("/auth/google",
+app.get(
+  "/auth/google",
   passport.authenticate("google", { scope: ["profile", "email"] })
 );
 
-app.get("/auth/google/callback",
+app.get(
+  "/auth/google/callback",
   passport.authenticate("google", {
     failureRedirect: "/unauthorized",
     failureMessage: true
   }),
   (req, res) => {
-    // Log any failure messages from the authentication process
     if (req.session.messages) {
       console.error("Authentication failure:", req.session.messages);
     }
@@ -102,7 +123,7 @@ app.get("/auth/google/callback",
   }
 );
 
-app.get("/logout", (req, res) => {
+app.get("/logout", (req, res, next) => {
   req.logout(function (err) {
     if (err) {
       return next(err);
@@ -111,7 +132,7 @@ app.get("/logout", (req, res) => {
       if (err) {
         console.error("Error destroying session:", err);
       }
-      res.clearCookie("mailroom_sid"); // Use the same key as in session config
+      res.clearCookie("connect.sid");
       res.redirect("/");
     });
   });
@@ -121,30 +142,19 @@ app.get("/unauthorized", (req, res) => {
   res.render("error", { msg: "Unauthorized: Your email is not authorized to access this system." });
 });
 
-// AUTHENTICATION MIDDLEWARE - Applied to all routes below this point
-function ensureAuthenticated(req, res, next) {
-  if (req.isAuthenticated()) {
-    return next();
-  }
-  req.session.returnTo = req.originalUrl;
-  res.redirect("/auth/google");
-}
-
-app.use(ensureAuthenticated);
-
-// PROTECTED ROUTES - All routes below require authentication
-
 const BASE_URL = process.env.BASE_URL;
 
 app.get("/", (req, res) => {
   res.render("issue_login", {
     activePage: "issue",
+    user: req.user.name
   });
 });
 
 app.get("/issue_login", (req, res) => {
   res.render("issue_login", {
     activePage: "issue",
+    user: req.user.name
   });
 });
 
@@ -210,6 +220,7 @@ app.get("/issue", (req, res) => {
         student: req.session.student,
         availableItems: availableItems,
         activePage: "issue",
+        user: req.user.name
       });
     }
   );
@@ -260,6 +271,7 @@ app.post("/issue", (req, res) => {
 app.get("/return_login", (req, res) => {
   res.render("return_login", {
     activePage: "landing",
+    user: req.user.name
   });
 });
 
@@ -282,6 +294,7 @@ app.get("/landing", (req, res) => {
   res.render("landing_redirect", {
     ashokaId: req.session.student.AshokaId,
     activePage: "landing",
+    user: req.user.name
   });
 });
 
@@ -301,12 +314,18 @@ app.post("/landing", async (req, res) => {
     [ashokaId],
     (err, results) => {
       if (err) return res.status(500).send("Database error");
+
       results.forEach((r) => {
         r.outTime = moment(r.outTime)
           .tz("Asia/Kolkata")
           .format("ddd DD-MM-YYYY HH:mm:ss");
       });
-      res.render("landing", { student: studentData, equipment: results });
+
+      res.render("landing", {
+        student: studentData,
+        equipment: results,
+        user: req.user.name
+      });
     }
   );
 });
@@ -356,6 +375,21 @@ app.post("/returnOne", (req, res) => {
       );
     }
   );
+});
+
+app.post('/getequipment', async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT equipment FROM Equipment');
+
+    const equipmentList = rows.map(row => row.equipment);
+    console.log("Equipment List:", equipmentList);
+
+    res.json({ equipment: equipmentList });
+
+  } catch (err) {
+    console.error("Database error:", err);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
 app.post("/returnMany", (req, res) => {
@@ -418,9 +452,118 @@ app.post("/returnMany", (req, res) => {
   });
 });
 
+app.post('/sports_request', (req, res) => {
+  const { studentEmail, studentName, equipment, quantity, startDate, endDate } = req.body;
+
+  if (!studentEmail || !studentName || !equipment || !quantity || !endDate) {
+    return res.status(400).json({ message: "All fields are required." });
+  }
+
+  if (quantity <= 0) {
+    return res.status(400).json({ message: "Quantity must be a positive number." });
+  }
+
+  const query = `
+    INSERT INTO SportsRequests (studentEmail, studentName, equipment, quantity, startDate, endDate)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `;
+
+  db.query(query, [studentEmail, studentName, equipment, quantity, startDate, endDate], (err) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ message: "Database insert failed." });
+    }
+    res.json({ message: "Request submitted successfully!" });
+  });
+});
+
+app.post('/update_inventory', (req, res) => {
+  const inventory = req.body.inventory;
+
+  for (const item of inventory) {
+    if (!item.equipment || item.equipment.trim() === "") {
+      return res.status(400).json({ error: `Equipment name cannot be empty.` });
+    }
+
+    const { reservedQuantity, damagedQuantity, inUseQuantity } = item;
+
+    const nums = [reservedQuantity, damagedQuantity, inUseQuantity];
+    if (nums.some(n => Number.isNaN(n) || n < 0)) {
+      return res.status(400).json({ error: `Quantities must be non-negative numbers.` });
+    }
+
+    item.totalQuantity = reservedQuantity + damagedQuantity + inUseQuantity;
+  }
+
+  let completed = 0;
+
+  inventory.forEach(item => {
+    db.query(
+      `INSERT INTO Equipment (equipment, totalQuantity, reservedQuantity, damagedQuantity, inUseQuantity)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         totalQuantity = VALUES(totalQuantity),
+         reservedQuantity = VALUES(reservedQuantity),
+         damagedQuantity = VALUES(damagedQuantity),
+         inUseQuantity = VALUES(inUseQuantity)`,
+      [
+        item.equipment,
+        item.totalQuantity,
+        item.reservedQuantity,
+        item.damagedQuantity,
+        item.inUseQuantity
+      ],
+      (err) => {
+        if (err) {
+          console.error(err);
+          return res.status(500).json({ error: "Database update failed." });
+        }
+
+        completed++;
+        if (completed === inventory.length) {
+          return res.json({ message: "Inventory updated successfully" });
+        }
+      }
+    );
+  });
+});
+
 app.get('/team_landing', (req, res) => {
   res.render('team_landing', {
     activePage: 'team-landing',
+    user: req.user.name
+  });
+});
+
+app.get('/admin', (req, res) => {
+  db.query('SELECT * FROM Equipment', (err, results) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).send('Database error');
+    }
+
+    const equipmentData = results.map(row => ({
+      equipment: row.equipment,
+      totalQuantity: row.totalQuantity,
+      reservedQuantity: row.reservedQuantity,
+      damagedQuantity: row.damagedQuantity,
+      inUseQuantity: row.inUseQuantity,
+    }));
+
+    console.log("Equipment Data:", equipmentData);
+
+    res.render('admin', {
+      activePage: 'admin',
+      user: req.user?.name || "Guest",
+      equipment: equipmentData
+    });
+  });
+});
+
+app.get('/statistics', (req, res) => {
+  res.render('dashboard', {
+    activePage: 'statistics',
+    user: req.user.name
   });
 });
 

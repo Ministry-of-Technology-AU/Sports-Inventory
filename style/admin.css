@@ -1,0 +1,180 @@
+.body-wrapper {
+    display: flex;
+    gap: 20px;
+    margin: 0px 30px 0px 30px;
+}
+
+button,
+a {
+    padding: 10px 16px;
+    font-size: 18px;
+    font-weight: 600;
+    background: #c4122f;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: "Nunito", sans-serif;
+}
+
+a {
+    text-decoration: none;
+}
+
+i {
+    margin: 0 10px 0 4px;
+    font-size: 22px;
+    text-align: left;
+    color: #c4122f;
+}
+
+.actions-buttons-list span {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.actions-buttons-list span i {
+    margin-right: 14px;
+    margin-left: 0;
+}
+
+/* Let the button / link stretch to fill remaining space */
+.actions-buttons-list span button,
+.actions-buttons-list span a {
+    flex: 1;
+    text-align: left;
+}
+
+.actions-buttons-list {
+    display: flex;
+    gap: 20px;
+    flex-direction: column;
+}
+
+.layout {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 40px;
+    margin-top: 30px;
+    padding: 0 40px;
+}
+
+/* Sidebar menu placement */
+.actions-menu {
+    width: 300px;
+    padding: 30px;
+    border-radius: 12px;
+    background: var(--secondary-color);
+    height: 460px;
+
+}
+
+.actions-menu h1 {
+    text-align: center;
+    color: white;
+    margin-bottom: 20px;
+}
+
+/* Right side content area */
+.content-box {
+    flex: 1;
+    min-height: 500px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(13, 56, 98, 0.15);
+    padding: 30px;
+}
+
+td[contenteditable="true"] {
+    background-color: #e8f4ff;
+    /* light blue */
+}
+
+.save-inventory-btn,
+.add-equipment-btn {
+    margin-top: 20px;
+}
+
+.sports-requests {
+    background: #ffffff;
+    padding: 25px;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    width: 450px;
+    margin-top: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.sports-requests h2 {
+    margin-top: 0;
+    font-size: 24px;
+    font-weight: 700;
+    color: #c4122f;
+}
+
+.sports-requests select {
+    width: 100%;
+    padding: 10px;
+    margin-top: 6px;
+    border-radius: 6px;
+    border: 1px solid #bbb;
+    font-size: 16px;
+    background-color: #fdfdfd;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.sports-requests select:focus {
+    border-color: #0077ff;
+    box-shadow: 0 0 6px rgba(0, 119, 255, 0.4);
+    outline: none;
+}
+
+#sports-request-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+#sports-request-form label {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+}
+
+#sports-request-form input,
+#sports-request-form select {
+    padding: 10px 14px;
+    font-size: 16px;
+    border: 2px solid #ddd;
+    border-radius: 10px;
+    outline: none;
+    font-family: "Nunito", sans-serif;
+    transition: border-color 0.2s ease;
+}
+
+#sports-request-form input:focus,
+#sports-request-form select:focus {
+    border-color: #c4122f;
+}
+
+#sports-request-form button {
+    margin-top: 10px;
+    background: #c4122f;
+    color: white;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 18px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+#sports-request-form button:hover {
+    background: #9e0f27;
+}
