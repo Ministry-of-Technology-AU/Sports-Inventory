@@ -233,9 +233,9 @@ function calculateAvailableEquipment(callback) {
       e.equipment,
       e.totalQuantity,
       e.inUseQuantity,
-      COALESCE(COUNT(s.id), 0) as pendingCount
+      COALESCE(COUNT(l.logID), 0) as pendingCount
     FROM Equipment e
-    LEFT JOIN SPORTS s ON e.equipment = s.equipment AND s.status = 'PENDING'
+    LEFT JOIN Logs l ON e.equipment = l.equipmentBorrowed AND l.pending = TRUE
     GROUP BY e.equipment, e.totalQuantity, e.inUseQuantity
   `;
 
@@ -272,7 +272,7 @@ app.get("/issue", (req, res) => {
 
 
 app.post("/issue", (req, res) => {
-  const outTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
+  const currentTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
   const quantity = req.body.quantity || {};
 
   const equipmentList = Object.keys(quantity).filter(
@@ -283,48 +283,75 @@ app.post("/issue", (req, res) => {
     return res.redirect("/landing");
   }
 
-  let completed = 0;
-  let hasError = false;
-  const issuedEquipment = [];
-
-  equipmentList.forEach((item) => {
-    const qtyToIssue = Number(quantity[item]);
-
-    db.query(
-      "INSERT INTO SPORTS (studentId, name, equipment, outNum, outTime, status, inNum) VALUES (?, ?, ?, ?, ?, 'PENDING', 0)",
-      [
-        req.session.student.AshokaId,
-        req.session.student.name,
-        item,
-        qtyToIssue,
-        outTime,
-      ],
-      (insertErr) => {
-        if (insertErr) {
-          hasError = true;
-          console.error("Error issuing equipment:", insertErr);
-          if (!res.headersSent) return res.status(500).send("Database error");
-        } else {
-          // Store issued equipment details
-          issuedEquipment.push({
-            equipment: item,
-            outNum: qtyToIssue
-          });
-        }
-
-        completed++;
-
-        if (completed === equipmentList.length && !hasError) {
-          // Render success page with equipment details
-          res.render("success", {
-            studentName: req.session.student.name,
-            equipment: issuedEquipment,
-            user: req.user?.name || "Guest"
-          });
-        }
+  // First, get the student email from the Students table
+  db.query(
+    "SELECT studentEmail FROM Students WHERE studentID = ?",
+    [req.session.student.AshokaId],
+    (emailErr, emailResults) => {
+      if (emailErr || emailResults.length === 0) {
+        console.error("Error fetching student email:", emailErr);
+        return res.status(500).send("Could not find student email");
       }
-    );
-  });
+
+      const studentEmail = emailResults[0].studentEmail;
+
+      let completed = 0;
+      let hasError = false;
+      const issuedEquipment = [];
+
+      equipmentList.forEach((item) => {
+        const qtyToIssue = Number(quantity[item]);
+
+        // Calculate due date (e.g., 7 days from now)
+        const dueDate = moment().tz("Asia/Kolkata").add(7, 'days').format("YYYY-MM-DD HH:mm:ss");
+
+        db.query(
+          `INSERT INTO Logs (
+            timestamp, 
+            equipmentBorrowed, 
+            studentID, 
+            studentEmail, 
+            studentName, 
+            dueOn, 
+            pending, 
+            returned
+          ) VALUES (?, ?, ?, ?, ?, ?, TRUE, FALSE)`,
+          [
+            currentTime,
+            item,
+            req.session.student.AshokaId,
+            studentEmail,
+            req.session.student.name,
+            dueDate
+          ],
+          (insertErr) => {
+            if (insertErr) {
+              hasError = true;
+              console.error("Error issuing equipment:", insertErr);
+              if (!res.headersSent) return res.status(500).send("Database error");
+            } else {
+              // Store issued equipment details
+              issuedEquipment.push({
+                equipment: item,
+                outNum: qtyToIssue
+              });
+            }
+
+            completed++;
+
+            if (completed === equipmentList.length && !hasError) {
+              // Render success page with equipment details
+              res.render("success", {
+                studentName: req.session.student.name,
+                equipment: issuedEquipment,
+                user: req.user?.name || "Guest"
+              });
+            }
+          }
+        );
+      });
+    }
+  );
 });
 
 app.get("/return_login", (req, res) => {
@@ -369,13 +396,27 @@ app.post("/landing", async (req, res) => {
   req.session.student = studentData;
 
   db.query(
-    "SELECT studentId, name, equipment, outNum, inNum, status, outTime, inTime FROM SPORTS WHERE studentId = ? AND status = 'PENDING'",
+    `SELECT 
+      logID,
+      studentID, 
+      studentName, 
+      equipmentBorrowed as equipment, 
+      timestamp as outTime, 
+      dueOn,
+      pending, 
+      returned,
+      returnedTimestamp as inTime
+    FROM Logs 
+    WHERE studentID = ? AND pending = TRUE AND returned = FALSE`,
     [ashokaId],
     (err, results) => {
       if (err) return res.status(500).send("Database error");
 
       results.forEach((r) => {
         r.outTime = moment(r.outTime)
+          .tz("Asia/Kolkata")
+          .format("ddd DD-MM-YYYY HH:mm:ss");
+        r.dueOn = moment(r.dueOn)
           .tz("Asia/Kolkata")
           .format("ddd DD-MM-YYYY HH:mm:ss");
       });
@@ -421,9 +462,9 @@ app.post("/returnMany", (req, res) => {
 
   equipments.forEach((equipment) => {
     db.query(
-      `SELECT * FROM SPORTS 
-       WHERE studentId = ? AND equipment = ? AND status = 'PENDING'
-       ORDER BY outTime ASC 
+      `SELECT * FROM Logs 
+       WHERE studentID = ? AND equipmentBorrowed = ? AND pending = TRUE AND returned = FALSE
+       ORDER BY timestamp ASC 
        LIMIT 1`,
       [studentId, equipment],
       (err, rows) => {
@@ -441,10 +482,14 @@ app.post("/returnMany", (req, res) => {
 
         const row = rows[0];
         db.query(
-          `UPDATE SPORTS 
-           SET inNum = ?, status = ?, inTime = ? 
-           WHERE id = ?`,
-          [row.outNum, "RETURNED", returnTime, row.id],
+          `UPDATE Logs 
+           SET pending = FALSE, 
+               returned = TRUE, 
+               returnedTimestamp = ?,
+               returnedByID = ?,
+               returnedByEmail = ?
+           WHERE logID = ?`,
+          [returnTime, req.user?.id || studentId, req.user?.email || req.session.student.email, row.logID],
           (updateErr) => {
             if (updateErr) {
               console.error("DB update error:", updateErr);

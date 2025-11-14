@@ -51,8 +51,8 @@ CREATE TABLE Logs (
     pending BOOLEAN NOT NULL DEFAULT TRUE,
     returned BOOLEAN NOT NULL DEFAULT FALSE,
     returnedTimestamp DATETIME,
-    returnedByID VARCHAR(50),
-    returnedByEmail VARCHAR(100),
+    returnedByID VARCHAR(50) NULL,
+    returnedByEmail VARCHAR(100) NULL,
     damaged ENUM('Yes', 'No') DEFAULT 'No',
     
     CONSTRAINT fk_logs_equipment FOREIGN KEY (equipmentBorrowed)
@@ -65,10 +65,14 @@ CREATE TABLE Logs (
         REFERENCES Students(studentEmail),
     
     CONSTRAINT fk_logs_returned_by_id FOREIGN KEY (returnedByID)
-        REFERENCES Students(studentID),
+        REFERENCES Students(studentID)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
     
     CONSTRAINT fk_logs_returned_by_email FOREIGN KEY (returnedByEmail)
         REFERENCES Students(studentEmail)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
 );
 
 -- Create EquipmentLogs table
