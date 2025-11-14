@@ -14,7 +14,7 @@
 </head>
 
 <body>
-    <%- include("nav",{ activePage: "team-landing" , config:"admin" }) %>
+    <%- include("nav",{ activePage: "team-landing" , config:"admin", userName: user }) %>
         <div class="box">
             <h1>Sports Team Issue</h1>
             <form action="/return_login" method="POST">

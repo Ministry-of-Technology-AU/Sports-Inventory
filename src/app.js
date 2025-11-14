@@ -7,31 +7,149 @@ import fetch from "node-fetch";
 import dotenv from "dotenv";
 import session from "express-session";
 import { fileURLToPath } from "url";
-dotenv.config();
+import passport from './passport-auth.js';
+import MySQLStore from 'express-mysql-session';
 
+console.log("Running");
 const app = express();
-const port = 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, "../.env") });
 
 // Serve static files from "style" folder
 app.use("/style", express.static(path.join(__dirname, "../style")));
 app.use("/images", express.static(path.join(__dirname, "../images")));
 
-app.listen(port);
+const port = process.env.PORT || 3000;
 
 const dbConfig = {
-  host: "localhost",
-  user: "root",
-  password: "92GN6PZKdpsrkp",
-  database: "SportsInventory",
-  port: 3306,
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  port: parseInt(process.env.DB_PORT) || 3306,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  connectTimeout: 30000, // 30 seconds for Railway
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
+  // Railway MySQL 9.4.0 uses self-signed SSL certificates
+  // Must set rejectUnauthorized: false to accept them
+  ssl: process.env.DB_HOST?.includes('railway') || process.env.DB_HOST?.includes('rlwy.net')
+    ? {
+      rejectUnauthorized: false,  // Accept self-signed certs
+      minVersion: 'TLSv1.2',      // MySQL 9.4.0 requirement
+      maxVersion: 'TLSv1.3'       // Support latest TLS
+    }
+    : undefined
 };
 
-const db = mysql.createConnection(dbConfig);
+console.log("Creating Railway MySQL connection pool...");
+const db = mysql.createPool(dbConfig);
+
+// Test connection on startup with retry logic
+async function testDatabaseConnection(retries = 3, delay = 2000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const connection = await new Promise((resolve, reject) => {
+        db.getConnection((err, conn) => {
+          if (err) reject(err);
+          else resolve(conn);
+        });
+      });
+
+      console.log("✅ Connected to Railway MySQL database with connection pool");
+      connection.release();
+      return true;
+    } catch (err) {
+      console.error(`❌ Database connection attempt ${attempt}/${retries} failed:`, err.message);
+
+      if (attempt === retries) {
+        console.error("Connection details:", {
+          host: dbConfig.host,
+          user: dbConfig.user,
+          database: dbConfig.database,
+          port: dbConfig.port,
+          ssl: dbConfig.ssl ? 'enabled' : 'disabled'
+        });
+        console.warn("⚠️ App will continue but database operations may fail");
+        console.warn("💡 Tip: Check if your Railway MySQL service is active and not paused");
+        return false;
+      }
+
+      console.log(`⏳ Retrying in ${delay / 1000} seconds...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      delay *= 2; // Exponential backoff
+    }
+  }
+}
+
+// Start connection test
+testDatabaseConnection();
+
+app.set("view engine", "ejs");
+
+const MySQLStoreSession = MySQLStore(session);
+const sessionStoreOptions = {
+  ...dbConfig,
+  schema: {
+    tableName: 'sessions',
+    columnNames: {
+      session_id: 'session_id',
+      expires: 'expires',
+      data: 'data'
+    }
+  },
+  expiration: 7 * 24 * 60 * 60 * 1000, // 1 week
+  checkExpirationInterval: 15 * 60 * 1000, // 15 minutes
+  createDatabaseTable: true,
+};
+
+// Basic setup
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const sessionStore = new MySQLStoreSession(sessionStoreOptions);
+
+const publicPaths = [
+  '/auth/google',
+  '/auth/google/callback',
+  '/unauthorized',
+];
+
+app.use(session({
+  key: 'mailroom_sid',
+  secret: process.env.SECRET_KEY || 'your_session_secret',
+  store: sessionStore,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 1 week
+  }
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Global authentication middleware
+app.use((req, res, next) => {
+  if (publicPaths && publicPaths.includes(req.path) || req.path.startsWith('/auth/')) {
+    return next();
+  }
+  ensureAuthenticated(req, res, next);
+});
+
+function ensureAuthenticated(req, res, next) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  req.session.returnTo = req.originalUrl;
+  res.redirect("/auth/google");
+}
+
+app.set("views", path.join(__dirname, "../views"));
 app.set("view engine", "ejs");
 
 // Fix students.json path
@@ -39,183 +157,124 @@ const students = JSON.parse(
   fs.readFileSync(path.join(__dirname, "../students.json"), "utf-8")
 );
 
-// If your views are in src/views, leave as is. If in root/views, use:
-app.set("views", path.join(__dirname, "../views"));
-
-//setting up session management
-app.use(
-  session({
-    secret: "superSecretKey123", // any random string (used to sign the session ID cookie)
-    resave: false, // don’t save session if nothing changed
-    saveUninitialized: false, // don’t create session until something stored
-    cookie: {
-      maxAge: 1000 * 60 * 60, // cookie valid for 1 hour (in ms)
-    },
-  })
+app.get(
+  "/auth/google",
+  passport.authenticate("google", { scope: ["profile", "email"] })
 );
+
+app.get(
+  "/auth/google/callback",
+  passport.authenticate("google", {
+    failureRedirect: "/unauthorized",
+    failureMessage: true
+  }),
+  (req, res) => {
+    if (req.session.messages) {
+      console.error("Authentication failure:", req.session.messages);
+    }
+
+    const returnTo = req.session.returnTo || '/issue_login';
+    delete req.session.returnTo;
+    res.redirect(returnTo);
+  }
+);
+
+app.get("/logout", (req, res, next) => {
+  req.logout(function (err) {
+    if (err) {
+      return next(err);
+    }
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("Error destroying session:", err);
+      }
+      res.clearCookie("connect.sid");
+      res.redirect("/");
+    });
+  });
+});
+
+app.get("/unauthorized", (req, res) => {
+  res.render("error", { msg: "Unauthorized: Your email is not authorized to access this system." });
+});
 
 const BASE_URL = process.env.BASE_URL;
 
-// Function to validate QR Code using API
-// async function processQr(qrString) {
-//   if (process.env.ENVIRONMENT == "DEVELOPMENT") {
-//     return {
-//       isValid: true,
-//       ashokaId: decodeURIComponent(qrString.trim()),
-//     };
-//   } else {
-//     qrString = decodeURIComponent(qrString.trim());
-//     try {
-//       // Ensure we have a valid token
-//       if (!authToken) {
-//         console.log("No Auth Token found. Attempting login...");
-//         await login();
-//       }
-
-//       // Call ValidateQRCode API
-//       const response = await fetch(
-//         `${BASE_URL}api/TPIntegration/ValidateQRCodeTP`,
-//         {
-//           method: "POST",
-//           headers: {
-//             "Content-Type": "application/json",
-//             Authorization: `Bearer ${authToken}`,
-//           },
-//           body: JSON.stringify({ QRCodeValue: qrString }),
-//         }
-//       );
-
-//       const data = await response.json();
-
-//       // If token is expired, refresh it and retry
-//       if (data.ErrorCode !== 0 && data.ErrorMessage.includes("token")) {
-//         console.warn("Token Expired. Refreshing...");
-//         await refreshAuthToken();
-//         return await processQr(qrString);
-//       }
-
-//       // If QR validation fails
-//       if (data.ErrorCode !== 0) {
-//         console.log(data.ErrorMessage);
-//         return { isValid: false, error: data.ErrorMessage };
-//       }
-
-//       console.log("QR Code Validated Successfully.");
-//       console.log("Ashoka ID:", data);
-//       return {
-//         isValid: true,
-//         ashokaId: data.AshokaId,
-//       };
-//     } catch (error) {
-//       console.error("QR Code Validation Error:", error.message);
-//       return { isValid: false, error: error.message };
-//     }
-//   }
-// }
-
 app.get("/", (req, res) => {
-  res.render("index");
-});
-app.get("/landing", (req, res) => {
-  // If you have AshokaId in session, use it; otherwise, redirect to login
-  if (!req.session.student) {
-    return res.redirect("/");
-  }
-  // Render a form that auto-submits AshokaId to POST /landing
-  res.render("landing_redirect", {
-    ashokaId: req.session.student.AshokaId,
-    activePage: "landing",
+  res.render("issue_login", {
+    activePage: "issue",
+    user: req.user?.name || "Guest"
   });
 });
-app.post("/landing", async (req, res) => {
-  // var processedQr = processQr(req.body.qrString);
-  // if (processedQr.isValid) {
-  const ashokaId = String(req.body.qrString).trim();
-  const studentData = students.find((student) => {
-    return String(student.AshokaId).trim() === String(ashokaId).trim();
+
+app.get("/issue_login", (req, res) => {
+  res.render("issue_login", {
+    activePage: "issue",
+    user: req.user?.name || "Guest"
   });
-  // });
-  if (!studentData) {
-    return res.status(404).send("Student not found");
-  }
-  req.session.student = studentData; // store in session
-  db.query(
-    "SELECT studentId, name, equipment, outNum, inNum, status, outTime, inTime FROM Sports WHERE studentId = ? AND status = 'PENDING'",
-    [ashokaId],
-    (err, results) => {
-      if (err) return res.status(500).send("Database error");
-      // Format outTime before sending to EJS
-      results.forEach((r) => {
-        r.formattedOutTime = moment(r.outTime)
-          .tz("Asia/Kolkata")
-          .format("YYYY-MM-DD HH:mm:ss");
-      });
-      res.render("landing", { student: studentData, equipment: results });
-    }
-  );
-  // } else {
-  //   res.status(400).send("Invalid QR");
-  // }
-}); // <-- Add this closing brace
-app.post("/returnOne", (req, res) => {
-  if (!req.session.student) {
-    return res.status(401).json({ success: false, error: "Not logged in" });
-  }
-
-  const equipment = req.body.equipment;
-  const studentId = req.session.student.AshokaId;
-  const returnTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
-
-  // Fetch the oldest pending row for that equipment
-  db.query(
-    `SELECT * FROM Sports 
-     WHERE studentId = ? AND equipment = ? AND status = 'PENDING'
-     ORDER BY outTime ASC 
-     LIMIT 1`,
-    [studentId, equipment],
-    (err, rows) => {
-      if (err) {
-        console.error("DB fetch error:", err);
-        return res.json({ success: false, error: "Database error" });
-      }
-
-      if (rows.length === 0) {
-        return res.json({ success: false, error: "No pending items" });
-      }
-
-      const row = rows[0];
-      const newInNum = row.outNum; // returning all at once
-      const newStatus = "RETURNED";
-
-      db.query(
-        `UPDATE Sports 
-         SET inNum = ?, status = ?, inTime = ? 
-         WHERE id = ?`,
-        [newInNum, newStatus, returnTime, row.id],
-        (updateErr) => {
-          if (updateErr) {
-            console.error("DB update error:", updateErr);
-            return res.json({ success: false, error: "Database update error" });
-          }
-
-          res.json({ success: true });
-        }
-      );
-    }
-  );
 });
+
+app.post("/issue_login", (req, res) => {
+  const ashokaId = req.body.qrString?.trim();
+  const studentData = students.find(
+    (s) => String(s.AshokaId).trim() === ashokaId
+  );
+
+  if (!studentData) return res.status(404).send("Student not found");
+  console.log("Student Data:", studentData);
+  req.session.student = studentData;
+  res.redirect("/issue");
+});
+
+
+function calculateAvailableEquipment(callback) {
+  const query = `
+    SELECT 
+      e.equipment,
+      e.totalQuantity,
+      e.inUseQuantity,
+      COALESCE(COUNT(s.id), 0) as pendingCount
+    FROM Equipment e
+    LEFT JOIN SPORTS s ON e.equipment = s.equipment AND s.status = 'PENDING'
+    GROUP BY e.equipment, e.totalQuantity, e.inUseQuantity
+  `;
+
+  db.query(query, (err, results) => {
+    if (err) {
+      console.error("Database error:", err);
+      return callback(err, null);
+    }
+
+    const availableItems = {};
+    results.forEach(row => {
+      // Available = Total - InUse - Pending
+      availableItems[row.equipment] = row.totalQuantity - row.inUseQuantity - row.pendingCount;
+    });
+
+    callback(null, availableItems);
+  });
+}
+
 app.get("/issue", (req, res) => {
-  if (!req.session.student) {
-    return res.redirect("/");
-  }
-  res.render("issue", { student: req.session.student, activePage: "issue" });
+  calculateAvailableEquipment((err, totalItems) => {
+    if (err) {
+      return res.status(500).send("Error calculating equipment");
+    }
+
+    res.render("issue", {
+      student: req.session.student,
+      availableItems: totalItems,
+      activePage: "issue",
+      user: req.user?.name || "Guest"
+    });
+  });
 });
+
+
 app.post("/issue", (req, res) => {
   const outTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
-
   const quantity = req.body.quantity || {};
 
-  // Filter equipment with non-zero quantity
   const equipmentList = Object.keys(quantity).filter(
     (item) => Number(quantity[item]) > 0
   );
@@ -226,13 +285,13 @@ app.post("/issue", (req, res) => {
 
   let completed = 0;
   let hasError = false;
+  const issuedEquipment = [];
 
   equipmentList.forEach((item) => {
     const qtyToIssue = Number(quantity[item]);
 
-    // Insert a new row for each issue
     db.query(
-      "INSERT INTO Sports (studentId, name, equipment, outNum, outTime, status, inNum) VALUES (?, ?, ?, ?, ?, 'PENDING', 0)",
+      "INSERT INTO SPORTS (studentId, name, equipment, outNum, outTime, status, inNum) VALUES (?, ?, ?, ?, ?, 'PENDING', 0)",
       [
         req.session.student.AshokaId,
         req.session.student.name,
@@ -245,85 +304,158 @@ app.post("/issue", (req, res) => {
           hasError = true;
           console.error("Error issuing equipment:", insertErr);
           if (!res.headersSent) return res.status(500).send("Database error");
+        } else {
+          // Store issued equipment details
+          issuedEquipment.push({
+            equipment: item,
+            outNum: qtyToIssue
+          });
         }
+
         completed++;
+
         if (completed === equipmentList.length && !hasError) {
-          res.redirect("/landing");
+          // Render success page with equipment details
+          res.render("success", {
+            studentName: req.session.student.name,
+            equipment: issuedEquipment,
+            user: req.user?.name || "Guest"
+          });
         }
       }
     );
   });
 });
 
-app.get("/return", (req, res) => {
-  if (!req.session.student) {
-    return res.redirect("/");
-  }
-  res.render("return", { student: req.session.student });
+app.get("/return_login", (req, res) => {
+  res.render("return_login", {
+    activePage: "landing",
+    user: req.user?.name || "Guest"
+  });
 });
-//returning the items
-app.post("/return", (req, res) => {
-  const returnTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
-  const quantity = req.body.quantity || {};
 
-  // Filter equipment with non-zero quantity
-  const equipmentList = Object.keys(quantity).filter(
-    (item) => Number(quantity[item]) > 0
+app.post("/return_login", (req, res) => {
+  const ashokaId = req.body.qrString?.trim();
+  const studentData = students.find(
+    (s) => String(s.AshokaId).trim() === ashokaId
   );
 
-  if (equipmentList.length === 0) {
-    return res.redirect("/landing");
+  if (!studentData) return res.status(404).send("Student not found");
+
+  req.session.student = studentData;
+  res.redirect("/landing");
+});
+
+app.get("/landing", (req, res) => {
+  if (!req.session.student) {
+    return res.redirect("/return_login");
+  }
+  res.render("landing_redirect", {
+    ashokaId: req.session.student.AshokaId,
+    activePage: "landing",
+    user: req.user?.name || "Guest"
+  });
+});
+
+app.post("/landing", async (req, res) => {
+  const ashokaId = String(req.body.qrString).trim();
+  const studentData = students.find((student) => {
+    return String(student.AshokaId).trim() === String(ashokaId).trim();
+  });
+
+  if (!studentData) {
+    return res.status(404).send("Student not found");
+  }
+  req.session.student = studentData;
+
+  db.query(
+    "SELECT studentId, name, equipment, outNum, inNum, status, outTime, inTime FROM SPORTS WHERE studentId = ? AND status = 'PENDING'",
+    [ashokaId],
+    (err, results) => {
+      if (err) return res.status(500).send("Database error");
+
+      results.forEach((r) => {
+        r.outTime = moment(r.outTime)
+          .tz("Asia/Kolkata")
+          .format("ddd DD-MM-YYYY HH:mm:ss");
+      });
+
+      res.render("landing", {
+        student: studentData,
+        equipment: results,
+        user: req.user?.name || "Guest"
+      });
+    }
+  );
+});
+
+app.post('/getequipment', (req, res) => {
+  db.query('SELECT equipment FROM Equipment', (err, rows) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    const equipmentList = rows.map(row => row.equipment);
+    console.log("Equipment List:", equipmentList);
+
+    res.json({ equipment: equipmentList });
+  });
+});
+
+app.post("/returnMany", (req, res) => {
+  if (!req.session.student) {
+    return res.status(401).json({ success: false, error: "Not logged in" });
+  }
+
+  const { equipments } = req.body;
+  const studentId = req.session.student.AshokaId;
+  const returnTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
+
+  if (!equipments || equipments.length === 0) {
+    return res.json({ success: false, error: "No items selected" });
   }
 
   let completed = 0;
   let hasError = false;
 
-  equipmentList.forEach((item) => {
-    const qtyToReturn = Number(quantity[item]);
-
-    // Select the oldest pending row for this equipment
+  equipments.forEach((equipment) => {
     db.query(
-      `SELECT * FROM Sports 
+      `SELECT * FROM SPORTS 
        WHERE studentId = ? AND equipment = ? AND status = 'PENDING'
        ORDER BY outTime ASC 
        LIMIT 1`,
-      [req.session.student.AshokaId, item],
+      [studentId, equipment],
       (err, rows) => {
-        if (err) {
+        if (err || rows.length === 0) {
+          console.error("DB fetch error:", err);
           hasError = true;
-          console.error("Error fetching pending row:", err);
-          if (!res.headersSent) res.status(500).send("Database error");
-          return;
-        }
-
-        if (!rows.length) {
-          // No pending rows for this equipment
           completed++;
-          if (completed === equipmentList.length && !hasError) {
-            res.redirect("/landing");
-          }
+          if (completed === equipments.length)
+            return res.json({
+              success: !hasError,
+              error: hasError ? "Some returns failed" : null,
+            });
           return;
         }
 
         const row = rows[0];
-        const newInNum = row.inNum + qtyToReturn;
-        const newStatus = newInNum >= row.outNum ? "RETURNED" : "PENDING";
-
         db.query(
-          `UPDATE Sports 
+          `UPDATE SPORTS 
            SET inNum = ?, status = ?, inTime = ? 
            WHERE id = ?`,
-          [newInNum, newStatus, returnTime, row.id],
+          [row.outNum, "RETURNED", returnTime, row.id],
           (updateErr) => {
             if (updateErr) {
+              console.error("DB update error:", updateErr);
               hasError = true;
-              console.error("Error updating return:", updateErr);
-              if (!res.headersSent) res.status(500).send("Database error");
             }
             completed++;
-            if (completed === equipmentList.length && !hasError) {
-              res.redirect("/landing");
-            }
+            if (completed === equipments.length)
+              res.json({
+                success: !hasError,
+                error: hasError ? "Some returns failed" : null,
+              });
           }
         );
       }
@@ -331,12 +463,121 @@ app.post("/return", (req, res) => {
   });
 });
 
-//destroying session on logout
-app.get("/logout", (req, res) => {
-  req.session.destroy((err) => {
+app.post('/sports_request', (req, res) => {
+  const { studentEmail, studentName, equipment, quantity, startDate, endDate } = req.body;
+
+  if (!studentEmail || !studentName || !equipment || !quantity || !endDate) {
+    return res.status(400).json({ message: "All fields are required." });
+  }
+
+  if (quantity <= 0) {
+    return res.status(400).json({ message: "Quantity must be a positive number." });
+  }
+
+  const query = `
+    INSERT INTO SportsRequests (studentEmail, studentName, equipment, quantity, startDate, endDate)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `;
+
+  db.query(query, [studentEmail, studentName, equipment, quantity, startDate, endDate], (err) => {
     if (err) {
-      console.error("Error destroying session:", err);
+      console.error("Database error:", err);
+      return res.status(500).json({ message: "Database insert failed." });
     }
+    res.json({ message: "Request submitted successfully!" });
   });
-  res.redirect("/");
+});
+
+app.post('/update_inventory', (req, res) => {
+  const inventory = req.body.inventory;
+
+  for (const item of inventory) {
+    if (!item.equipment || item.equipment.trim() === "") {
+      return res.status(400).json({ error: `Equipment name cannot be empty.` });
+    }
+
+    const { reservedQuantity, damagedQuantity, inUseQuantity } = item;
+
+    const nums = [reservedQuantity, damagedQuantity, inUseQuantity];
+    if (nums.some(n => Number.isNaN(n) || n < 0)) {
+      return res.status(400).json({ error: `Quantities must be non-negative numbers.` });
+    }
+
+    item.totalQuantity = reservedQuantity + damagedQuantity + inUseQuantity;
+  }
+
+  let completed = 0;
+
+  inventory.forEach(item => {
+    db.query(
+      `INSERT INTO Equipment (equipment, totalQuantity, reservedQuantity, damagedQuantity, inUseQuantity)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         totalQuantity = VALUES(totalQuantity),
+         reservedQuantity = VALUES(reservedQuantity),
+         damagedQuantity = VALUES(damagedQuantity),
+         inUseQuantity = VALUES(inUseQuantity)`,
+      [
+        item.equipment,
+        item.totalQuantity,
+        item.reservedQuantity,
+        item.damagedQuantity,
+        item.inUseQuantity
+      ],
+      (err) => {
+        if (err) {
+          console.error(err);
+          return res.status(500).json({ error: "Database update failed." });
+        }
+
+        completed++;
+        if (completed === inventory.length) {
+          return res.json({ message: "Inventory updated successfully" });
+        }
+      }
+    );
+  });
+});
+
+app.get('/team_landing', (req, res) => {
+  res.render('team_landing', {
+    activePage: 'team-landing',
+    user: req.user?.name || "Guest"
+  });
+});
+
+app.get('/admin', (req, res) => {
+  db.query('SELECT * FROM Equipment', (err, results) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).send('Database error');
+    }
+
+    const equipmentData = results.map(row => ({
+      equipment: row.equipment,
+      totalQuantity: row.totalQuantity,
+      reservedQuantity: row.reservedQuantity,
+      damagedQuantity: row.damagedQuantity,
+      inUseQuantity: row.inUseQuantity,
+    }));
+
+    console.log("Equipment Data:", equipmentData);
+
+    res.render('admin', {
+      activePage: 'admin',
+      user: req.user?.name || "Guest",
+      equipment: equipmentData
+    });
+  });
+});
+
+app.get('/statistics', (req, res) => {
+  res.render('dashboard', {
+    activePage: 'statistics',
+    user: req.user?.name || "Guest"
+  });
+});
+
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });
