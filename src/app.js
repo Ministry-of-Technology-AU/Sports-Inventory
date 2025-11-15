@@ -7,8 +7,8 @@ import fetch from "node-fetch";
 import dotenv from "dotenv";
 import session from "express-session";
 import { fileURLToPath } from "url";
-import passport from './passport-auth.js';
-import MySQLStore from 'express-mysql-session';
+import passport from "./passport-auth.js";
+import MySQLStore from "express-mysql-session";
 
 console.log("Running");
 const app = express();
@@ -37,13 +37,15 @@ const dbConfig = {
   keepAliveInitialDelay: 0,
   // Railway MySQL 9.4.0 uses self-signed SSL certificates
   // Must set rejectUnauthorized: false to accept them
-  ssl: process.env.DB_HOST?.includes('railway') || process.env.DB_HOST?.includes('rlwy.net')
-    ? {
-      rejectUnauthorized: false,  // Accept self-signed certs
-      minVersion: 'TLSv1.2',      // MySQL 9.4.0 requirement
-      maxVersion: 'TLSv1.3'       // Support latest TLS
-    }
-    : undefined
+  ssl:
+    process.env.DB_HOST?.includes("railway") ||
+    process.env.DB_HOST?.includes("rlwy.net")
+      ? {
+          rejectUnauthorized: false, // Accept self-signed certs
+          minVersion: "TLSv1.2", // MySQL 9.4.0 requirement
+          maxVersion: "TLSv1.3", // Support latest TLS
+        }
+      : undefined,
 };
 
 console.log("Creating Railway MySQL connection pool...");
@@ -60,11 +62,16 @@ async function testDatabaseConnection(retries = 3, delay = 2000) {
         });
       });
 
-      console.log("✅ Connected to Railway MySQL database with connection pool");
+      console.log(
+        "✅ Connected to Railway MySQL database with connection pool"
+      );
       connection.release();
       return true;
     } catch (err) {
-      console.error(`❌ Database connection attempt ${attempt}/${retries} failed:`, err.message);
+      console.error(
+        `❌ Database connection attempt ${attempt}/${retries} failed:`,
+        err.message
+      );
 
       if (attempt === retries) {
         console.error("Connection details:", {
@@ -72,15 +79,17 @@ async function testDatabaseConnection(retries = 3, delay = 2000) {
           user: dbConfig.user,
           database: dbConfig.database,
           port: dbConfig.port,
-          ssl: dbConfig.ssl ? 'enabled' : 'disabled'
+          ssl: dbConfig.ssl ? "enabled" : "disabled",
         });
         console.warn("⚠️ App will continue but database operations may fail");
-        console.warn("💡 Tip: Check if your Railway MySQL service is active and not paused");
+        console.warn(
+          "💡 Tip: Check if your Railway MySQL service is active and not paused"
+        );
         return false;
       }
 
       console.log(`⏳ Retrying in ${delay / 1000} seconds...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
       delay *= 2; // Exponential backoff
     }
   }
@@ -95,12 +104,12 @@ const MySQLStoreSession = MySQLStore(session);
 const sessionStoreOptions = {
   ...dbConfig,
   schema: {
-    tableName: 'sessions',
+    tableName: "sessions",
     columnNames: {
-      session_id: 'session_id',
-      expires: 'expires',
-      data: 'data'
-    }
+      session_id: "session_id",
+      expires: "expires",
+      data: "data",
+    },
   },
   expiration: 7 * 24 * 60 * 60 * 1000, // 1 week
   checkExpirationInterval: 15 * 60 * 1000, // 15 minutes
@@ -113,29 +122,30 @@ app.use(express.urlencoded({ extended: true }));
 
 const sessionStore = new MySQLStoreSession(sessionStoreOptions);
 
-const publicPaths = [
-  '/auth/google',
-  '/auth/google/callback',
-  '/unauthorized',
-];
+const publicPaths = ["/auth/google", "/auth/google/callback", "/unauthorized"];
 
-app.use(session({
-  key: 'mailroom_sid',
-  secret: process.env.SECRET_KEY || 'your_session_secret',
-  store: sessionStore,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 1 week
-  }
-}));
+app.use(
+  session({
+    key: "mailroom_sid",
+    secret: process.env.SECRET_KEY || "your_session_secret",
+    store: sessionStore,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
+    },
+  })
+);
 
 app.use(passport.initialize());
 app.use(passport.session());
 
 // Global authentication middleware
 app.use((req, res, next) => {
-  if (publicPaths && publicPaths.includes(req.path) || req.path.startsWith('/auth/')) {
+  if (
+    (publicPaths && publicPaths.includes(req.path)) ||
+    req.path.startsWith("/auth/")
+  ) {
     return next();
   }
   ensureAuthenticated(req, res, next);
@@ -166,14 +176,14 @@ app.get(
   "/auth/google/callback",
   passport.authenticate("google", {
     failureRedirect: "/unauthorized",
-    failureMessage: true
+    failureMessage: true,
   }),
   (req, res) => {
     if (req.session.messages) {
       console.error("Authentication failure:", req.session.messages);
     }
 
-    const returnTo = req.session.returnTo || '/issue_login';
+    const returnTo = req.session.returnTo || "/issue_login";
     delete req.session.returnTo;
     res.redirect(returnTo);
   }
@@ -181,21 +191,25 @@ app.get(
 
 app.get("/logout", (req, res, next) => {
   req.logout(function (err) {
-    if (err) {
-      return next(err);
-    }
-    req.session.destroy((err) => {
-      if (err) {
-        console.error("Error destroying session:", err);
-      }
+    if (err) return next(err);
+
+    req.session.destroy(() => {
       res.clearCookie("connect.sid");
-      res.redirect("/");
+
+      // Redirect to Google logout, then back to your site
+      const googleLogoutUrl =
+        "https://accounts.google.com/Logout?continue=https://www.google.com&continue=" +
+        encodeURIComponent(process.env.BASE_URL || "http://localhost:3000");
+
+      return res.redirect(googleLogoutUrl);
     });
   });
 });
 
 app.get("/unauthorized", (req, res) => {
-  res.render("error", { msg: "Unauthorized: Your email is not authorized to access this system." });
+  res.render("error", {
+    msg: "Unauthorized: Your email is not authorized to access this system.",
+  });
 });
 
 const BASE_URL = process.env.BASE_URL;
@@ -203,14 +217,14 @@ const BASE_URL = process.env.BASE_URL;
 app.get("/", (req, res) => {
   res.render("issue_login", {
     activePage: "issue",
-    user: req.user?.name || "Guest"
+    user: req.user?.name || "Guest",
   });
 });
 
 app.get("/issue_login", (req, res) => {
   res.render("issue_login", {
     activePage: "issue",
-    user: req.user?.name || "Guest"
+    user: req.user?.name || "Guest",
   });
 });
 
@@ -225,7 +239,6 @@ app.post("/issue_login", (req, res) => {
   req.session.student = studentData;
   res.redirect("/issue");
 });
-
 
 function calculateAvailableEquipment(callback) {
   const query = `
@@ -246,9 +259,10 @@ function calculateAvailableEquipment(callback) {
     }
 
     const availableItems = {};
-    results.forEach(row => {
+    results.forEach((row) => {
       // Available = Total - InUse - Pending
-      availableItems[row.equipment] = row.totalQuantity - row.inUseQuantity - row.pendingCount;
+      availableItems[row.equipment] =
+        row.totalQuantity - row.inUseQuantity - row.pendingCount;
     });
 
     callback(null, availableItems);
@@ -265,11 +279,10 @@ app.get("/issue", (req, res) => {
       student: req.session.student,
       availableItems: totalItems,
       activePage: "issue",
-      user: req.user?.name || "Guest"
+      user: req.user?.name || "Guest",
     });
   });
 });
-
 
 app.post("/issue", (req, res) => {
   const currentTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
@@ -303,7 +316,10 @@ app.post("/issue", (req, res) => {
         const qtyToIssue = Number(quantity[item]);
 
         // Calculate due date (e.g., 7 days from now)
-        const dueDate = moment().tz("Asia/Kolkata").add(7, 'days').format("YYYY-MM-DD HH:mm:ss");
+        const dueDate = moment()
+          .tz("Asia/Kolkata")
+          .add(7, "days")
+          .format("YYYY-MM-DD HH:mm:ss");
 
         db.query(
           `INSERT INTO Logs (
@@ -322,18 +338,19 @@ app.post("/issue", (req, res) => {
             req.session.student.AshokaId,
             studentEmail,
             req.session.student.name,
-            dueDate
+            dueDate,
           ],
           (insertErr) => {
             if (insertErr) {
               hasError = true;
               console.error("Error issuing equipment:", insertErr);
-              if (!res.headersSent) return res.status(500).send("Database error");
+              if (!res.headersSent)
+                return res.status(500).send("Database error");
             } else {
               // Store issued equipment details
               issuedEquipment.push({
                 equipment: item,
-                outNum: qtyToIssue
+                outNum: qtyToIssue,
               });
             }
 
@@ -344,7 +361,7 @@ app.post("/issue", (req, res) => {
               res.render("success", {
                 studentName: req.session.student.name,
                 equipment: issuedEquipment,
-                user: req.user?.name || "Guest"
+                user: req.user?.name || "Guest",
               });
             }
           }
@@ -357,7 +374,7 @@ app.post("/issue", (req, res) => {
 app.get("/return_login", (req, res) => {
   res.render("return_login", {
     activePage: "landing",
-    user: req.user?.name || "Guest"
+    user: req.user?.name || "Guest",
   });
 });
 
@@ -380,7 +397,7 @@ app.get("/landing", (req, res) => {
   res.render("landing_redirect", {
     ashokaId: req.session.student.AshokaId,
     activePage: "landing",
-    user: req.user?.name || "Guest"
+    user: req.user?.name || "Guest",
   });
 });
 
@@ -424,20 +441,20 @@ app.post("/landing", async (req, res) => {
       res.render("landing", {
         student: studentData,
         equipment: results,
-        user: req.user?.name || "Guest"
+        user: req.user?.name || "Guest",
       });
     }
   );
 });
 
-app.post('/getequipment', (req, res) => {
-  db.query('SELECT equipment FROM Equipment', (err, rows) => {
+app.post("/getequipment", (req, res) => {
+  db.query("SELECT equipment FROM Equipment", (err, rows) => {
     if (err) {
       console.error("Database error:", err);
       return res.status(500).json({ error: "Database error" });
     }
 
-    const equipmentList = rows.map(row => row.equipment);
+    const equipmentList = rows.map((row) => row.equipment);
     console.log("Equipment List:", equipmentList);
 
     res.json({ equipment: equipmentList });
@@ -489,7 +506,12 @@ app.post("/returnMany", (req, res) => {
                returnedByID = ?,
                returnedByEmail = ?
            WHERE logID = ?`,
-          [returnTime, req.user?.id || studentId, req.user?.email || req.session.student.email, row.logID],
+          [
+            returnTime,
+            req.user?.id || studentId,
+            req.user?.email || req.session.student.email,
+            row.logID,
+          ],
           (updateErr) => {
             if (updateErr) {
               console.error("DB update error:", updateErr);
@@ -508,15 +530,18 @@ app.post("/returnMany", (req, res) => {
   });
 });
 
-app.post('/sports_request', (req, res) => {
-  const { studentEmail, studentName, equipment, quantity, startDate, endDate } = req.body;
+app.post("/sports_request", (req, res) => {
+  const { studentEmail, studentName, equipment, quantity, startDate, endDate } =
+    req.body;
 
   if (!studentEmail || !studentName || !equipment || !quantity || !endDate) {
     return res.status(400).json({ message: "All fields are required." });
   }
 
   if (quantity <= 0) {
-    return res.status(400).json({ message: "Quantity must be a positive number." });
+    return res
+      .status(400)
+      .json({ message: "Quantity must be a positive number." });
   }
 
   const query = `
@@ -524,16 +549,20 @@ app.post('/sports_request', (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?)
   `;
 
-  db.query(query, [studentEmail, studentName, equipment, quantity, startDate, endDate], (err) => {
-    if (err) {
-      console.error("Database error:", err);
-      return res.status(500).json({ message: "Database insert failed." });
+  db.query(
+    query,
+    [studentEmail, studentName, equipment, quantity, startDate, endDate],
+    (err) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).json({ message: "Database insert failed." });
+      }
+      res.json({ message: "Request submitted successfully!" });
     }
-    res.json({ message: "Request submitted successfully!" });
-  });
+  );
 });
 
-app.post('/update_inventory', (req, res) => {
+app.post("/update_inventory", (req, res) => {
   const inventory = req.body.inventory;
 
   for (const item of inventory) {
@@ -544,8 +573,10 @@ app.post('/update_inventory', (req, res) => {
     const { reservedQuantity, damagedQuantity, inUseQuantity } = item;
 
     const nums = [reservedQuantity, damagedQuantity, inUseQuantity];
-    if (nums.some(n => Number.isNaN(n) || n < 0)) {
-      return res.status(400).json({ error: `Quantities must be non-negative numbers.` });
+    if (nums.some((n) => Number.isNaN(n) || n < 0)) {
+      return res
+        .status(400)
+        .json({ error: `Quantities must be non-negative numbers.` });
     }
 
     item.totalQuantity = reservedQuantity + damagedQuantity + inUseQuantity;
@@ -553,7 +584,7 @@ app.post('/update_inventory', (req, res) => {
 
   let completed = 0;
 
-  inventory.forEach(item => {
+  inventory.forEach((item) => {
     db.query(
       `INSERT INTO Equipment (equipment, totalQuantity, reservedQuantity, damagedQuantity, inUseQuantity)
        VALUES (?, ?, ?, ?, ?)
@@ -567,7 +598,7 @@ app.post('/update_inventory', (req, res) => {
         item.totalQuantity,
         item.reservedQuantity,
         item.damagedQuantity,
-        item.inUseQuantity
+        item.inUseQuantity,
       ],
       (err) => {
         if (err) {
@@ -583,22 +614,46 @@ app.post('/update_inventory', (req, res) => {
     );
   });
 });
+app.post("/delete_equipment", (req, res) => {
+  const { equipment } = req.body;
 
-app.get('/team_landing', (req, res) => {
-  res.render('team_landing', {
-    activePage: 'team-landing',
-    user: req.user?.name || "Guest"
+  if (!equipment) {
+    return res.status(400).json({ message: "Equipment name missing." });
+  }
+
+  db.query(
+    "DELETE FROM Equipment WHERE equipment = ?",
+    [equipment],
+    (err, result) => {
+      if (err) {
+        console.error("Delete error:", err);
+        return res.status(500).json({ message: "Database error." });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.json({ message: "Item not found in database." });
+      }
+
+      return res.json({ message: "Equipment deleted successfully." });
+    }
+  );
+});
+
+app.get("/team_landing", (req, res) => {
+  res.render("team_landing", {
+    activePage: "team-landing",
+    user: req.user?.name || "Guest",
   });
 });
 
-app.get('/admin', (req, res) => {
-  db.query('SELECT * FROM Equipment', (err, results) => {
+app.get("/admin", (req, res) => {
+  db.query("SELECT * FROM Equipment", (err, results) => {
     if (err) {
-      console.error('Database error:', err);
-      return res.status(500).send('Database error');
+      console.error("Database error:", err);
+      return res.status(500).send("Database error");
     }
 
-    const equipmentData = results.map(row => ({
+    const equipmentData = results.map((row) => ({
       equipment: row.equipment,
       totalQuantity: row.totalQuantity,
       reservedQuantity: row.reservedQuantity,
@@ -608,18 +663,18 @@ app.get('/admin', (req, res) => {
 
     console.log("Equipment Data:", equipmentData);
 
-    res.render('admin', {
-      activePage: 'admin',
+    res.render("admin", {
+      activePage: "admin",
       user: req.user?.name || "Guest",
-      equipment: equipmentData
+      equipment: equipmentData,
     });
   });
 });
 
-app.get('/statistics', (req, res) => {
-  res.render('dashboard', {
-    activePage: 'statistics',
-    user: req.user?.name || "Guest"
+app.get("/statistics", (req, res) => {
+  res.render("dashboard", {
+    activePage: "statistics",
+    user: req.user?.name || "Guest",
   });
 });
 
