@@ -1,5 +1,301 @@
 <!DOCTYPE html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Issue Equipment</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../style/global.css" />
+    <style>
+      :root {
+        --secondary-color: #0d3862;
+      }
+
+      .box {
+        width: 100%;
+      }
+
+      .up {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 35px;
+        padding-bottom: 25px;
+        border-bottom: 2px solid #e0e0e0;
+      }
+
+      .details {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .details p {
+        font-size: 16px;
+      }
+
+      .up h1 {
+        font-size: 28px;
+      }
+
+      .fake {
+        opacity: 0;
+      }
+
+      /* Selected items summary */
+      .selected-summary {
+        display: none;
+        background: #f8f9fa;
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        padding: 25px;
+        margin-bottom: 30px;
+      }
+
+      .selected-summary.active {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 25px;
+      }
+
+      .selected-items {
+        flex: 1;
+      }
+
+      .selected-items h3 {
+        font-size: 20px;
+        margin-bottom: 18px;
+        color: #333;
+      }
+
+      .selected-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+      }
+
+      .selected-item {
+        background: white;
+        padding: 12px 18px;
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+        font-size: 15px;
+        color: #495057;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      }
+
+      .selected-item strong {
+        color: var(--secondary-color);
+        margin-right: 5px;
+      }
+
+      .submit-container {
+        display: flex;
+        align-items: center;
+      }
+
+      .submit-container button {
+        background: #28a745;
+        color: white;
+        border: none;
+        padding: 16px 36px;
+        font-size: 16px;
+        font-weight: 600;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.3s;
+        white-space: nowrap;
+      }
+
+      .submit-container button:hover {
+        background: #218838;
+      }
+
+      /* Equipment grid with header */
+      .equipment-section {
+        margin-top: 25px;
+      }
+
+      .equipment-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 25px;
+        padding: 25px;
+        /* background: #f8f9fa; */
+        border-radius: 8px;
+      }
+
+      .paired-section {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+        gap: 35px;
+        margin-bottom: 40px;
+      }
+
+      .single-section {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 20px;
+      }
+
+      /* Paired card container */
+      .paired-card {
+        background: white;
+        border-radius: 10px;
+        padding: 25px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+        transition: transform 0.2s, box-shadow 0.2s;
+        /* border: 2px solid var(--secondary-color); */
+        border: 1px rgba(0, 0, 0, 0.271) solid;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .paired-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+      }
+
+      .paired-header {
+        text-align: center;
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--secondary-color);
+        padding-bottom: 12px;
+        border-bottom: 2px solid #e9ecef;
+      }
+
+      .item-in-pair {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 15px;
+        /* background: #f8f9fa; */
+        border-radius: 8px;
+      }
+
+      .item-in-pair img {
+        width: 90px;
+        height: 90px;
+        object-fit: cover;
+        border-radius: 8px;
+        margin-bottom: 12px;
+      }
+
+      .item-in-pair label {
+        font-size: 15px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 8px;
+        text-align: center;
+      }
+
+      .item-in-pair .availability {
+        font-size: 14px;
+        color: #28a745;
+        font-weight: 600;
+        margin-bottom: 12px;
+      }
+
+      /* Single card (non-paired) */
+      .card {
+        background: white;
+        border-radius: 10px;
+        padding: 28px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+        transition: transform 0.2s, box-shadow 0.2s;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        border: 1px rgba(0, 0, 0, 0.271) solid;
+      }
+
+      .card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+      }
+
+      .card img {
+        width: 90px;
+        height: 90px;
+        object-fit: cover;
+        border-radius: 8px;
+        margin-bottom: 18px;
+      }
+
+      .card label {
+        font-size: 18px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 10px;
+        text-align: center;
+      }
+
+      .card .availability {
+        font-size: 15px;
+        color: #28a745;
+        font-weight: 600;
+        margin-bottom: 18px;
+      }
+
+      .something {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+      }
+
+      .something button {
+        width: 30px;
+        height: 30px;
+        border: 2px solid var(--secondary-color);
+        background: white;
+        color: var(--secondary-color);
+        font-size: 28px;
+        font-weight: bold;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        padding: 0;
+      }
+
+      .something button:hover:not(:disabled) {
+        background: var(--secondary-color);
+        color: white;
+      }
+
+      .something button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .something input {
+        width: 65px;
+        height: 40px;
+        text-align: center;
+        font-size: 16px;
+        font-weight: 600;
+        border: 2px solid #dee2e6;
+        border-radius: 6px;
+      }
+
+      .card[style*="opacity"],
+      .paired-card[style*="opacity"] {
+        opacity: 0.5 !important;
+        pointer-events: none;
+      }
+    </style>
+  </head>
 
 <head>
   <meta charset="UTF-8" />
@@ -302,12 +598,8 @@
     <div class="box">
       <div class="up">
         <h1 class="details">
-          <p>
-            <%= student.name %>
-          </p>
-          <p>
-            <%= student.AshokaId %>
-          </p>
+          <p><%= student.name %></p>
+          <p><%= student.AshokaId %></p>
         </h1>
         <h1>Issue Equipment</h1>
         <h1 class="fake">H</h1>
@@ -315,114 +607,166 @@
 
       <form id="issueForm" action="/issue" method="POST" novalidate>
         <!-- prettier-ignore -->
-        <% const pairedEquipment=[ { sport: "Badminton" , items: [ { name: "Badminton Racquet" ,
-          img: "badminton racquet.jpeg" }, { name: "Cock" , img: "cock.jpg" } ] }, { sport: "Squash" , items: [ {
-          name: "Squash Racquet" , img: "squash racquet.jpg" }, { name: "Squash Ball" , img: "Squash ball.jpg" } ] }, {
-          sport: "Tennis" , items: [ { name: "Tennis Racquet" , img: "tennis racquet.webp" }, { name: "Tennis Ball" ,
-          img: "tennis ball.jpg" } ] }, { sport: "Table Tennis" , items: [ { name: "Table Tennis Racquet" ,
-          img: "TT Racquet.jpg" }, { name: "TT Ball" , img: "TT ball.jpg" } ] }, { sport: "Pickleball" , items: [ {
-          name: "Pickleball Racquet" , img: "pickleball.jpg" }, { name: "Pickleball Ball" , img: "pickleball ball.webp"
-          } ] }, { sport: "Cricket" , items: [ { name: "Cricket Bat" , img: "cricket-bat.jpg" }, { name: "Cricket Ball"
-          , img: "cricket-ball.jpg" } ] } ]; const singleEquipment=[ { name: "Cycle" , img: "cycle.jpg" }, {
-          name: "Pool Stick" , img: "pool stick.webp" }, { name: "Football" , img: "football.jpeg" }, {
-          name: "Basketball" , img: "basketball.png" }, { name: "Volleyball" , img: "volleyball.webp" }, {
-          name: "Yoga Mat" , img: "yoga-mat.jpg" }, { name: "Frisbee" , img: "Frisbee.jpg" } ]; %>
+        <%
+          const pairedEquipment = [
+            {
+              sport: "Badminton",
+              items: [
+                { name: "Badminton Racquet", img: "badminton racquet.jpeg" },
+                { name: "Shuttle", img: "cock.jpg" },
+              ],
+            },
+            {
+              sport: "Squash",
+              items: [
+                { name: "Squash Racquet", img: "squash racquet.jpg" },
+                { name: "Squash Ball", img: "squash ball.jpg" },
+              ],
+            },
+            {
+              sport: "Tennis",
+              items: [
+                { name: "Tennis Racquet", img: "tennis racquet.webp" },
+                { name: "Tennis Ball", img: "tennis ball.jpg" },
+              ],
+            },
+            {
+              sport: "Table Tennis",
+              items: [
+                { name: "Table Tennis Racquet", img: "TT Racquet.jpg" },
+                { name: "TT Ball", img: "TT ball.jpg" },
+              ],
+            },
+            {
+              sport: "Pickleball",
+              items: [
+                { name: "Pickleball Paddle", img: "pickleball.jpg" },
+                { name: "Pickleball Ball", img: "pickleball ball.webp" },
+              ],
+            },
+            {
+              sport: "Cricket",
+              items: [
+                { name: "Cricket Bat", img: "cricket-bat.jpg" },
+                { name: "Cricket Ball", img: "cricket-ball.jpg" },
+              ],
+            },
+          ];
 
-          <!-- Selected items summary -->
-          <div class="selected-summary" id="selectedSummary">
-            <div class="selected-items">
-              <h3>Selected Equipment:</h3>
-              <div class="selected-list" id="selectedList"></div>
+          const singleEquipment = [
+            { name: "Cycle", img: "cycle.jpg" },
+            { name: "Pool Stick", img: "pool stick.webp" },
+            { name: "Football", img: "football.jpeg" },
+            { name: "Basketball", img: "basketball.png" },
+            { name: "Volleyball", img: "volleyball.webp" },
+            { name: "Yoga Mat", img: "yoga-mat.jpg" },
+            { name: "Frisbee", img: "Frisbee.jpg" },
+          ];
+          %>
+
+        <!-- Equipment grid -->
+        <div class="equipment-section">
+          <div class="equipment-grid">
+            <!-- Paired equipment section -->
+            <div class="paired-section">
+              <% pairedEquipment.forEach(pair=> { %>
+              <div class="paired-card">
+                <div class="paired-header"><%= pair.sport %></div>
+                <% pair.items.forEach(item=> { %>
+                <div class="item-in-pair">
+                  <img src="/images/<%= item.img %>" alt="<%= item.name %>" />
+                  <label> <%= item.name %> </label>
+                  <p class="availability">
+                    <%= availableItems[item.name] || 0 %>
+                  </p>
+                  <div class="something">
+                    <button type="button" class="decrement">-</button>
+                    <input
+                      type="number"
+                      name="quantity[<%= item.name %>]"
+                      value="0"
+                      min="0"
+                      step="1"
+                      data-name="<%= item.name %>"
+                    />
+                    <button type="button" class="increment">+</button>
+                  </div>
+                </div>
+                <% }) %>
+              </div>
+              <% }) %>
             </div>
-            <div class="submit-container">
-              <button type="submit">Submit</button>
+
+            <!-- Single equipment section -->
+            <div class="single-section">
+              <% singleEquipment.forEach(item=> { %>
+              <div class="card">
+                <img src="/images/<%= item.img %>" alt="<%= item.name %>" />
+                <label> <%= item.name %> </label>
+                <p class="availability">
+                  <%= availableItems[item.name] || 0 %>
+                </p>
+                <div class="something">
+                  <button type="button" class="decrement">-</button>
+                  <input
+                    type="number"
+                    name="quantity[<%= item.name %>]"
+                    value="0"
+                    min="0"
+                    step="1"
+                    data-name="<%= item.name %>"
+                  />
+                  <button type="button" class="increment">+</button>
+                </div>
+              </div>
+              <% }) %>
             </div>
           </div>
+        </div>
 
-          <!-- Equipment grid -->
-          <div class="equipment-section">
-            <div class="equipment-grid">
-              <!-- Paired equipment section -->
-              <div class="paired-section">
-                <% pairedEquipment.forEach(pair=> { %>
-                  <div class="paired-card">
-                    <div class="paired-header">
-                      <%= pair.sport %>
-                    </div>
-                    <% pair.items.forEach(item=> { %>
-                      <div class="item-in-pair">
-                        <img src="/images/<%= item.img %>" alt="<%= item.name %>" />
-                        <label>
-                          <%= item.name %>
-                        </label>
-                        <p class="availability">
-                          <%= availableItems[item.name] || 0 %>
-                        </p>
-                        <div class="something">
-                          <button type="button" class="decrement">-</button>
-                          <input type="number" name="quantity[<%= item.name %>]" value="0" min="0" step="1"
-                            data-name="<%= item.name %>" />
-                          <button type="button" class="increment">+</button>
-                        </div>
-                      </div>
-                      <% }) %>
-                  </div>
-                  <% }) %>
-              </div>
-
-              <!-- Single equipment section -->
-              <div class="single-section">
-                <% singleEquipment.forEach(item=> { %>
-                  <div class="card">
-                    <img src="/images/<%= item.img %>" alt="<%= item.name %>" />
-                    <label>
-                      <%= item.name %>
-                    </label>
-                    <p class="availability">
-                      <%= availableItems[item.name] || 0 %>
-                    </p>
-                    <div class="something">
-                      <button type="button" class="decrement">-</button>
-                      <input type="number" name="quantity[<%= item.name %>]" value="0" min="0" step="1"
-                        data-name="<%= item.name %>" />
-                      <button type="button" class="increment">+</button>
-                    </div>
-                  </div>
-                  <% }) %>
-              </div>
-            </div>
+        <!-- Selected items summary -->
+        <div class="selected-summary" id="selectedSummary">
+          <div class="selected-items">
+            <h3>Selected Equipment:</h3>
+            <div class="selected-list" id="selectedList"></div>
           </div>
+          <div class="submit-container">
+            <button type="submit">Submit</button>
+          </div>
+        </div>
       </form>
     </div>
 
     <script>
+      // Update selected items summary on input change
       function updateSelectedSummary() {
-        const selectedList = document.getElementById('selectedList');
-        const selectedSummary = document.getElementById('selectedSummary');
-        const inputs = document.querySelectorAll('input[type=number]');
+        const selectedList = document.getElementById("selectedList");
+        const selectedSummary = document.getElementById("selectedSummary");
+        const inputs = document.querySelectorAll("input[type=number]");
 
-        selectedList.innerHTML = '';
+        selectedList.innerHTML = "";
         let hasSelection = false;
 
-        inputs.forEach(input => {
+        inputs.forEach((input) => {
           const value = parseInt(input.value) || 0;
           if (value > 0) {
             hasSelection = true;
-            const itemName = input.dataset.name;
-            const itemDiv = document.createElement('div');
-            itemDiv.className = 'selected-item';
+            const itemName =
+              input.dataset.name ||
+              input.name.replace("quantity[", "").replace("]", "");
+            const itemDiv = document.createElement("div");
+            itemDiv.className = "selected-item";
             itemDiv.innerHTML = `<strong>${value}x</strong> ${itemName}`;
             selectedList.appendChild(itemDiv);
           }
         });
 
         if (hasSelection) {
-          selectedSummary.classList.add('active');
+          selectedSummary.classList.add("active");
         } else {
-          selectedSummary.classList.remove('active');
+          selectedSummary.classList.remove("active");
         }
       }
-
       // Handle both paired cards and single cards
       document.querySelectorAll(".card, .paired-card").forEach((card) => {
         const availabilityElements = card.querySelectorAll(".availability");
@@ -432,12 +776,12 @@
 
         // Check if entire paired card should be disabled
         let allUnavailable = true;
-        availabilityElements.forEach(avail => {
+        availabilityElements.forEach((avail) => {
           const available = parseInt(avail.textContent) || 0;
           if (available > 0) allUnavailable = false;
         });
 
-        if (allUnavailable && card.classList.contains('paired-card')) {
+        if (allUnavailable && card.classList.contains("paired-card")) {
           card.style.opacity = "0.6";
         }
 
@@ -451,7 +795,7 @@
           if (available === 0) {
             incBtn.disabled = true;
             input.disabled = true;
-            if (card.classList.contains('card')) {
+            if (card.classList.contains("card")) {
               card.style.opacity = "0.6";
             }
           }
@@ -470,10 +814,9 @@
             updateSelectedSummary();
           });
 
-          input.addEventListener('change', updateSelectedSummary);
+          input.addEventListener("change", updateSelectedSummary);
         });
       });
     </script>
-</body>
-
+  </body>
 </html>

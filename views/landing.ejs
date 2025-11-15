@@ -49,12 +49,8 @@
     <div class="box">
       <div class="up">
         <h1 class="details">
-          <p>
-            <%= student.name %>
-          </p>
-          <p>
-            <%= student.AshokaId %>
-          </p>
+          <p><%= student.name %></p>
+          <p><%= student.AshokaId %></p>
         </h1>
         <h1>Pending Equipment Borrowed</h1>
         <h1 class="fake">H</h1>
@@ -115,7 +111,10 @@
         ?.addEventListener("click", async () => {
           const selected = Array.from(
             document.querySelectorAll(".equipment-checkbox:checked")
-          ).map((cb) => cb.value);
+          )
+            // ignore header checkbox (it has empty value)
+            .filter((cb) => cb.value.trim() !== "")
+            .map((cb) => cb.value);
 
           if (selected.length === 0) {
             alert("Please select at least one item to return.");
@@ -173,6 +172,5 @@
           }
         });
     </script>
-</body>
-
+  </body>
 </html>
