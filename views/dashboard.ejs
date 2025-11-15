@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="/style/global.css" />
+    <link rel="stylesheet" href="/style/index.css" />
+    <link rel="stylesheet" href="/style/admin.css" />
+    <script src="https://kit.fontawesome.com/2cacd0cbd0.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+    <%- include("nav",{ activePage: "statistics" , config:"admin", userName: user }) %>
+        <div class="body-wrapper">
+            <div class="actions-menu">
+                <h1>Actions</h1>
+                <li class="actions-buttons-list">
+                    <span><i class="fa-solid fa-square-poll-vertical"></i> <button type="button">Most
+                            Borrowed</button></span>
+                    <span><i class="fa-solid fa-ban"></i> <button type="button">Most Frequently Run
+                            Out</button></span>
+                    <span><i class="fa-solid fa-clock"></i><button type="button">Borrowing
+                            Durations</button></span>
+                </li>
+            </div>
+            <div class="content-box">
+                <!-- You can put whatever you want here later -->
+            </div>
+        </div>
+
+</body>
+
+</html>

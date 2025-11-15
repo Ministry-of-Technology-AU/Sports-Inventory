@@ -9,11 +9,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
     rel="stylesheet" />
+  <link rel="stylesheet" href="/style/global.css" />
   <link rel="stylesheet" href="/style/index.css" />
 </head>
 
 <body>
-  <%- include("nav",{ activePage: "landing" }) %>
+  <%- include("nav",{ activePage: "landing" , config:"admin", userName: user }) %>
     <div class="box">
       <h1>Student Return</h1>
       <form action="/return_login" method="POST">

@@ -1,27 +1,51 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Landing Page</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="/style/landing.css" />
-    <link rel="stylesheet" href="/style/return-page.css" />
-    <link rel="stylesheet" href="/style/global.css" />
-    <style>
-      body {
-        background-color: var(--off-white);
-      }
-    </style>
-  </head>
 
-  <body>
-    <%- include("nav",{ activePage: "landing" }) %>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Landing Page</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="/style/landing.css" />
+  <link rel="stylesheet" href="/style/return-page.css" />
+  <link rel="stylesheet" href="/style/global.css" />
+  <style>
+    body {
+      background-color: var(--off-white);
+    }
+
+    .button-group {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #returnAllBtn {
+      background: var(--primary-color);
+      color: var(--text-color-secondary);
+      border: none;
+      padding: 16px 36px;
+      font-size: 18px;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    #returnAllBtn:hover {
+      background: var(--primary-color);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(13, 56, 98, 0.3);
+    }
+  </style>
+</head>
+
+<body>
+  <%- include("nav",{ activePage: "landing" , config: "admin" , userName: user }) %>
     <div class="box">
       <div class="up">
         <h1 class="details">
@@ -32,59 +56,56 @@
         <h1 class="fake">H</h1>
       </div>
 
-      <% if (equipment.length === 0) { %>
-      <p class="noPendingEquipment">No pending equipment</p>
-      <% } else { %>
-      <table border="1" cellpadding="5">
-        <thead>
-          <tr>
-            <th>Equipment</th>
-            <th>Quantity Borrowed</th>
-            <th>Checkout Time</th>
-            <th>
-              <div class="checkbox">
-                <input class="equipment-checkbox" type="checkbox" value="" />
-                <span class="checkmark"></span>
-              </div>
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <% equipment.forEach(function(item) { %>
-          <tr>
-            <td><%= item.equipment %></td>
-            <td><%= item.outNum %></td>
-            <td><%= item.outTime %></td>
-            <td>
-              <div class="checkbox">
-                <input
-                  class="equipment-checkbox"
-                  type="checkbox"
-                  value="<%= item.equipment %>"
-                />
-                <span class="checkmark"></span>
-              </div>
-            </td>
-          </tr>
-          <% }); %>
-        </tbody>
-      </table>
+      <% if (equipment.length===0) { %>
+        <p class="noPendingEquipment">No pending equipment</p>
+        <% } else { %>
+          <table border="1" cellpadding="5">
+            <thead>
+              <tr>
+                <th>Equipment</th>
+                <th>Quantity Borrowed</th>
+                <th>Checkout Time</th>
+                <th>Return</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% equipment.forEach(function(item) { %>
+                <tr>
+                  <td>
+                    <%= item.equipment %>
+                  </td>
+                  <td>
+                    <%= item.outNum %>
+                  </td>
+                  <td>
+                    <%= item.outTime %>
+                  </td>
+                  <td>
+                    <label class="checkbox">
+                      <input class="equipment-checkbox" type="checkbox" value="<%= item.equipment %>" />
+                      <span class="checkmark"></span>
+                    </label>
+                  </td>
+                </tr>
+                <% }); %>
+            </tbody>
+          </table>
 
-      <br />
-      <% } %>
+          <br />
+          <% } %>
 
-      <div class="bottom">
-        <p>Technology Ministry of Ashoka</p>
-        <% if (equipment.length != 0) { %>
-        <button class="bottomBtn" id="returnSelectedBtn">
-          Return Selected
-        </button>
-        <% } %>
-      </div>
+            <div class="bottom">
+              <% if (equipment.length !=0) { %>
+                <div class="button-group">
+                  <button id="returnAllBtn">Return All</button>
+                  <button id="returnSelectedBtn">Return Selected</button>
+                </div>
+                <% }%>
+            </div>
     </div>
 
     <script>
-      // ✅ Handle "Return Selected" button (unchanged)
+      // Return Selected functionality
       document
         .getElementById("returnSelectedBtn")
         ?.addEventListener("click", async () => {
@@ -110,7 +131,7 @@
             const data = await res.json();
 
             if (data.success) {
-              window.location.reload();
+              window.location.href = "/landing";
             } else {
               alert("Error: " + data.error);
             }
@@ -119,48 +140,37 @@
           }
         });
 
-      // ✅ Handle "Select All" checkbox in table header
-      const headerCheckbox = document.querySelector(
-        "thead .equipment-checkbox"
-      );
+      // Return All functionality
+      document
+        .getElementById("returnAllBtn")
+        ?.addEventListener("click", async () => {
+          if (!confirm("Are you sure you want to return all equipment?")) {
+            return;
+          }
 
-      if (headerCheckbox) {
-        const rowCheckboxes = document.querySelectorAll(
-          "tbody .equipment-checkbox"
-        );
+          // Get all equipment names from the table
+          const allEquipment = Array.from(
+            document.querySelectorAll(".equipment-checkbox")
+          ).map((cb) => cb.value);
 
-        // When header checkbox toggled → select/unselect all
-        headerCheckbox.addEventListener("change", (e) => {
-          const isChecked = e.target.checked;
-          rowCheckboxes.forEach((cb) => (cb.checked = isChecked));
+          try {
+            const res = await fetch("/returnMany", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ equipments: allEquipment }),
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+              window.location.href = "/landing";
+            } else {
+              alert("Error: " + data.error);
+            }
+          } catch (err) {
+            alert("Network error: " + err.message);
+          }
         });
-
-        // When individual checkboxes change → update header checkbox state
-        rowCheckboxes.forEach((cb) =>
-          cb.addEventListener("change", () => {
-            const allChecked = Array.from(rowCheckboxes).every(
-              (c) => c.checked
-            );
-            const someChecked = Array.from(rowCheckboxes).some(
-              (c) => c.checked
-            );
-            headerCheckbox.checked = allChecked;
-            headerCheckbox.indeterminate = !allChecked && someChecked;
-          })
-        );
-      }
-      // ✅ Select All / Deselect All
-      document.getElementById("selectAllBtn")?.addEventListener("click", () => {
-        const checkboxes = document.querySelectorAll(".equipment-checkbox");
-        const allChecked = Array.from(checkboxes).every((cb) => cb.checked);
-
-        checkboxes.forEach((cb) => (cb.checked = !allChecked));
-
-        // Change button text based on state
-        document.getElementById("selectAllBtn").textContent = allChecked
-          ? "Select All"
-          : "Remove All";
-      });
     </script>
   </body>
 </html>
