@@ -396,46 +396,55 @@ app.get("/landing", (req, res) => {
   });
 });
 
-app.post("/landing", async (req, res) => {
+app.post("/landing", (req, res) => {
   const ashokaId = String(req.body.qrString).trim();
-  const studentData = req.session.student;
 
-  if (!studentData) {
-    return res.status(404).send("Student not found");
-  }
-  req.session.student = studentData;
-
+  // Fetch the latest student record from Students table
   db.query(
-    `SELECT 
-      logID,
-      studentID, 
-      studentName, 
-      equipmentBorrowed as equipment, 
-      timestamp as outTime, 
-      dueOn,
-      pending, 
-      returned,
-      returnedTimestamp as inTime
-    FROM Logs 
-    WHERE studentID = ? AND pending = TRUE AND returned = FALSE`,
+    "SELECT * FROM Students WHERE studentID = ?",
     [ashokaId],
-    (err, results) => {
+    (err, rows) => {
       if (err) return res.status(500).send("Database error");
+      if (!rows.length) return res.status(404).send("Student not found");
 
-      results.forEach((r) => {
-        r.outTime = moment(r.outTime)
-          .tz("Asia/Kolkata")
-          .format("ddd DD-MM-YYYY HH:mm:ss");
-        r.dueOn = moment(r.dueOn)
-          .tz("Asia/Kolkata")
-          .format("ddd DD-MM-YYYY HH:mm:ss");
-      });
+      const studentData = rows[0];
+      req.session.student = studentData;
 
-      res.render("landing", {
-        student: studentData,
-        equipment: results,
-        user: req.user?.name || "Guest",
-      });
+      // Now fetch this student's pending equipment
+      db.query(
+        `SELECT 
+          logID,
+          studentID,
+          studentName,
+          equipmentBorrowed AS equipment,
+          timestamp AS outTime,
+          dueOn,
+          pending,
+          returned,
+          returnedTimestamp AS inTime
+        FROM Logs
+        WHERE studentID = ? AND pending = TRUE AND returned = FALSE`,
+        [ashokaId],
+        (logErr, results) => {
+          if (logErr) return res.status(500).send("Database error");
+
+          // Format timestamps
+          results.forEach((r) => {
+            r.outTime = moment(r.outTime)
+              .tz("Asia/Kolkata")
+              .format("ddd DD-MM-YYYY HH:mm:ss");
+            r.dueOn = moment(r.dueOn)
+              .tz("Asia/Kolkata")
+              .format("ddd DD-MM-YYYY HH:mm:ss");
+          });
+
+          res.render("landing", {
+            student: studentData,
+            equipment: results,
+            user: req.user?.name || "Guest",
+          });
+        }
+      );
     }
   );
 });
