@@ -20,7 +20,7 @@
     ></script>
   </head>
 
-  <body>
+<body>
     <%- include("nav",{ activePage: "admin" , config:"admin", userName: user })
     %>
     <div class="body-wrapper">
@@ -90,23 +90,31 @@
 
           <form id="sports-request-form">
             <label>Student Name:</label>
-            <input type="text" id="studentName" required />
+            <input name="studentName" type="text" id="studentName" required />
 
             <label>Student Email:</label>
-            <input type="email" id="studentEmail" required />
+            <input name="email" type="email" id="studentEmail" required />
 
             <label for="equipment">Equipment:</label>
-            <select id="equipment" name="equipment" required>
+            <select name="equipment" id="equipment" required>
               <option value="" disabled selected>Loading...</option>
             </select>
 
             <label>Quantity:</label>
-            <input type="number" id="quantity" min="1" required />
+            <input
+              name="quantity"
+              type="number"
+              id="quantity"
+              min="1"
+              required
+            />
 
             <label>Valid Till:</label>
-            <input type="date" id="endDate" required />
+            <input name="endDate" type="date" id="endDate" required />
 
-            <button type="submit">Submit Request</button>
+            <button class="sports-request-submit" type="submit">
+              Submit Request
+            </button>
           </form>
         </div>
         <div class="view-offences-section" style="display: none">
@@ -135,7 +143,6 @@
         </div>
       </div>
     </div>
-  </body>
 
   <!--section toggle script-->
   <script>
@@ -293,16 +300,22 @@
       try {
         const response = await fetch("/getequipment");
         const data = await response.json();
-        // Expecting: [{ "equipment": "Cricket Bat" }, { "equipment": "Football" }, ...]
 
         const select = document.getElementById("equipment");
         select.innerHTML =
           '<option value="" disabled selected>Select Equipment</option>';
 
-        data.forEach((item) => {
+        // Handle both array and object response formats
+        const equipmentList = Array.isArray(data) ? data : (data.equipment || []);
+
+        equipmentList.forEach((item) => {
+          const equipmentName = typeof item === "string" ? item : item.equipment;
+          const reservedQty = typeof item === "string" ? 0 : (item.reservedQuantity || 0);
+
           const option = document.createElement("option");
-          option.value = item.equipment;
-          option.textContent = item.equipment;
+          option.value = equipmentName;
+          option.textContent = equipmentName;
+          option.dataset.max = reservedQty;
           select.appendChild(option);
         });
       } catch (err) {
@@ -313,6 +326,31 @@
       }
     }
 
-    loadEquipment();
+    document.addEventListener("DOMContentLoaded", loadEquipment);
+  </script>
+
+  <!-- setting the cap for not exceeding reserved quantity in sports team requests -->
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const equipmentSelect = document.getElementById("equipment");
+      const qtyInput = document.getElementById("quantity");
+
+      equipmentSelect.addEventListener("change", () => {
+        const selected = equipmentSelect.options[equipmentSelect.selectedIndex];
+        const max = parseInt(selected.dataset.max || "0", 10);
+
+        qtyInput.max = max;
+        qtyInput.value = "";
+        qtyInput.placeholder = `Max: ${max}`;
+      });
+
+      qtyInput.addEventListener("input", () => {
+        const max = parseInt(qtyInput.max, 10);
+        if (!isNaN(max) && qtyInput.value > max) {
+          alert(`You cannot issue more than ${max}.`);
+          qtyInput.value = max;
+        }
+      });
+    });
   </script>
 </html>

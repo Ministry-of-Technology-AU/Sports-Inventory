@@ -447,14 +447,16 @@ app.post("/landing", async (req, res) => {
   );
 });
 
-app.post("/getequipment", (req, res) => {
-  db.query("SELECT equipment FROM Equipment", (err, rows) => {
-    if (err) {
-      console.error("Database error:", err);
-      return res.status(500).json({ error: "Database error" });
-    }
+app.get("/getequipment", (req, res) => {
+  db.query("SELECT equipment, reservedQuantity FROM Equipment", (err, rows) => {
+    if (err) return res.status(500).json({ error: "Database error" });
 
-    res.json(rows.map((r) => ({ equipment: r.equipment })));
+    res.json(
+      rows.map((r) => ({
+        equipment: r.equipment,
+        reservedQuantity: r.reservedQuantity,
+      }))
+    );
   });
 });
 
@@ -531,6 +533,7 @@ app.post("/sports_request", (req, res) => {
   const { studentEmail, studentName, equipment, quantity, startDate, endDate } =
     req.body;
 
+  // Basic validation
   if (!studentEmail || !studentName || !equipment || !quantity || !endDate) {
     return res.status(400).json({ message: "All fields are required." });
   }
@@ -541,22 +544,72 @@ app.post("/sports_request", (req, res) => {
       .json({ message: "Quantity must be a positive number." });
   }
 
-  const query = `
-    INSERT INTO SportsRequests (studentEmail, studentName, equipment, quantity, startDate, endDate)
-    VALUES (?, ?, ?, ?, ?, ?)
+  // 1. First fetch reservedQuantity for that equipment
+  const getQtyQuery = `
+    SELECT reservedQuantity, inUseQuantity 
+    FROM Equipment
+    WHERE equipment = ?
   `;
 
-  db.query(
-    query,
-    [studentEmail, studentName, equipment, quantity, startDate, endDate],
-    (err) => {
-      if (err) {
-        console.error("Database error:", err);
-        return res.status(500).json({ message: "Database insert failed." });
-      }
-      res.json({ message: "Request submitted successfully!" });
+  db.query(getQtyQuery, [equipment], (err, rows) => {
+    if (err || rows.length === 0) {
+      console.error(err);
+      return res.status(500).json({ message: "Equipment lookup failed." });
     }
-  );
+
+    const reserved = rows[0].reservedQuantity;
+
+    // 2. Check if enough reserved quantity exists
+    if (quantity > reserved) {
+      return res.status(400).json({
+        message: `Insufficient reserved stock. Max allowed: ${reserved}`,
+      });
+    }
+
+    // 3. Insert sports request
+    const insertRequestQuery = `
+      INSERT INTO SportsRequests 
+      (studentEmail, studentName, equipment, quantity, startDate, endDate)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `;
+
+    db.query(
+      insertRequestQuery,
+      [studentEmail, studentName, equipment, quantity, startDate, endDate],
+      (err2) => {
+        if (err2) {
+          console.error(err2);
+          return res.status(500).json({ message: "Request insert failed." });
+        }
+
+        // 4. Update Equipment: reserved -= qty, inUse += qty
+        const updateEquipmentQuery = `
+          UPDATE Equipment
+          SET reservedQuantity = reservedQuantity - ?,
+              inUseQuantity = inUseQuantity + ?
+          WHERE equipment = ?
+        `;
+
+        db.query(
+          updateEquipmentQuery,
+          [quantity, quantity, equipment],
+          (err3) => {
+            if (err3) {
+              console.error(err3);
+              return res
+                .status(500)
+                .json({ message: "Failed to update inventory." });
+            }
+
+            // Everything done
+            res.json({
+              message: "Sports request submitted and inventory updated!",
+            });
+          }
+        );
+      }
+    );
+  });
 });
 
 app.post("/update_inventory", (req, res) => {
