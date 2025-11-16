@@ -454,10 +454,7 @@ app.post("/getequipment", (req, res) => {
       return res.status(500).json({ error: "Database error" });
     }
 
-    const equipmentList = rows.map((row) => row.equipment);
-    console.log("Equipment List:", equipmentList);
-
-    res.json({ equipment: equipmentList });
+    res.json(rows.map((r) => ({ equipment: r.equipment })));
   });
 });
 
@@ -622,7 +619,7 @@ app.post("/delete_equipment", (req, res) => {
   }
 
   db.query(
-    "DELETE FROM Equipment WHERE equipment = ?",
+    "DELETE FROM Equipment WHERE TRIM(LOWER(equipment)) = TRIM(LOWER(?))",
     [equipment],
     (err, result) => {
       if (err) {
@@ -662,12 +659,31 @@ app.get("/admin", (req, res) => {
     }));
 
     console.log("Equipment Data:", equipmentData);
+    // Query offences list
+    db.query(
+      `SELECT studentID, studentName, studentEmail, borrowedNotOutstanding,
+              borrowedOutstanding, offences
+       FROM Students WHERE offences > 0`,
+      (err2, offenceQueryResults) => {
+        if (err2) return res.status(500).send("Database error");
 
-    res.render("admin", {
-      activePage: "admin",
-      user: req.user?.name || "Guest",
-      equipment: equipmentData,
-    });
+        const offenceResults = offenceQueryResults.map((row) => ({
+          studentID: row.studentID,
+          studentName: row.studentName,
+          studentEmail: row.studentEmail,
+          borrowedNotOutstanding: row.borrowedNotOutstanding,
+          borrowedOutstanding: row.borrowedOutstanding,
+          offences: row.offences,
+        }));
+
+        res.render("admin", {
+          activePage: "admin",
+          user: req.user?.name || "Guest",
+          equipment: equipmentData,
+          offenceList: offenceResults,
+        });
+      }
+    );
   });
 });
 

@@ -41,7 +41,9 @@
           >
           <span
             ><i class="fa-solid fa-triangle-exclamation"></i
-            ><button type="button">View Offences</button></span
+            ><button class="view-offences-btn" type="button">
+              View Offences
+            </button></span
           >
           <span
             ><i class="fa-solid fa-square-poll-vertical"></i
@@ -107,16 +109,43 @@
             <button type="submit">Submit Request</button>
           </form>
         </div>
+        <div class="view-offences-section" style="display: none">
+          <table border="1" cellpadding="5">
+            <thead>
+              <tr>
+                <th>StudentID</th>
+                <th>Student Name</th>
+                <th>Student Email</th>
+                <th>Borrowed Outstanding</th>
+                <th>Offences</th>
+              </tr>
+            </thead>
+            <tbody id="offence-table-body">
+              <% offenceList.forEach(function(student) { %>
+              <tr>
+                <td><%= student.studentID %></td>
+                <td><%= student.studentName %></td>
+                <td><%= student.studentEmail %></td>
+                <td><%= student.borrowedOutstanding %></td>
+                <td><%= student.offences %></td>
+              </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </body>
 
+  <!--section toggle script-->
   <script>
     document
       .querySelector(".update-inventory-btn")
       .addEventListener("click", function () {
         const section_1 = document.querySelector(".sports-requests");
         section_1.style.display = "none";
+        const section_2 = document.querySelector(".view-offences-section");
+        section_2.style.display = "none";
         const section = document.querySelector(".update-inventory-section");
         section.style.display = "block";
       });
@@ -126,8 +155,20 @@
       .addEventListener("click", function () {
         const section_1 = document.querySelector(".update-inventory-section");
         section_1.style.display = "none";
+        const section_2 = document.querySelector(".view-offences-section");
+        section_2.style.display = "none";
         const section = document.querySelector(".sports-requests");
         section.style.display = "block";
+      });
+    document
+      .querySelector(".view-offences-btn")
+      .addEventListener("click", function () {
+        const section_1 = document.querySelector(".update-inventory-section");
+        section_1.style.display = "none";
+        const section = document.querySelector(".sports-requests");
+        section.style.display = "none";
+        const section_2 = document.querySelector(".view-offences-section");
+        section_2.style.display = "block";
       });
   </script>
 
