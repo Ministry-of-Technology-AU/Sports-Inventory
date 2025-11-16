@@ -215,6 +215,12 @@ app.get("/", (req, res) => {
     user: req.user?.name || "Guest",
   });
 });
+app.get("/issue_login", (req, res) => {
+  res.render("issue_login", {
+    activePage: "issue",
+    user: req.user?.name || "Guest",
+  });
+});
 
 app.post("/issue_login", (req, res) => {
   const ashokaId = req.body.qrString?.trim();
@@ -307,57 +313,58 @@ app.post("/issue", (req, res) => {
       equipmentList.forEach((item) => {
         const qtyToIssue = Number(quantity[item]);
 
-        // Calculate due date (e.g., 7 days from now)
         const dueDate = moment()
           .tz("Asia/Kolkata")
           .add(7, "days")
           .format("YYYY-MM-DD HH:mm:ss");
 
-        db.query(
-          `INSERT INTO Logs (
-            timestamp, 
-            equipmentBorrowed, 
-            studentID, 
-            studentEmail, 
-            studentName, 
-            dueOn, 
-            pending, 
-            returned
-          ) VALUES (?, ?, ?, ?, ?, ?, TRUE, FALSE)`,
-          [
-            currentTime,
-            item,
-            req.session.student.studentID,
-            studentEmail,
-            req.session.student.studentName,
-            dueDate,
-          ],
-          (insertErr) => {
-            if (insertErr) {
-              hasError = true;
-              console.error("Error issuing equipment:", insertErr);
-              if (!res.headersSent)
-                return res.status(500).send("Database error");
-            } else {
-              // Store issued equipment details
-              issuedEquipment.push({
-                equipment: item,
-                outNum: qtyToIssue,
-              });
+        // Insert one row per issued quantity
+        for (let i = 0; i < qtyToIssue; i++) {
+          db.query(
+            `INSERT INTO Logs (
+        timestamp, 
+        equipmentBorrowed, 
+        studentID, 
+        studentEmail, 
+        studentName, 
+        dueOn, 
+        pending, 
+        returned
+      ) VALUES (?, ?, ?, ?, ?, ?, TRUE, FALSE)`,
+            [
+              currentTime,
+              item,
+              req.session.student.studentID,
+              studentEmail,
+              req.session.student.studentName,
+              dueDate,
+            ],
+            (insertErr) => {
+              if (insertErr) {
+                hasError = true;
+                console.error("Error issuing equipment:", insertErr);
+                if (!res.headersSent)
+                  return res.status(500).send("Database error");
+              }
             }
+          );
+        }
 
-            completed++;
+        // Only push one summary entry for display
+        issuedEquipment.push({
+          equipment: item,
+          outNum: qtyToIssue,
+        });
 
-            if (completed === equipmentList.length && !hasError) {
-              // Render success page with equipment details
-              res.render("success", {
-                studentName: req.session.student.studentName,
-                equipment: issuedEquipment,
-                user: req.user?.name || "Guest",
-              });
-            }
-          }
-        );
+        completed++;
+
+        if (completed === equipmentList.length && !hasError) {
+          res.render("success", {
+            studentName: req.session.student.studentName,
+            equipment: issuedEquipment,
+            user: req.user?.name || "Guest",
+          });
+        }
       });
     }
   );
@@ -399,7 +406,6 @@ app.get("/landing", (req, res) => {
 app.post("/landing", (req, res) => {
   const ashokaId = String(req.body.qrString).trim();
 
-  // Fetch the latest student record from Students table
   db.query(
     "SELECT * FROM Students WHERE studentID = ?",
     [ashokaId],
@@ -410,25 +416,23 @@ app.post("/landing", (req, res) => {
       const studentData = rows[0];
       req.session.student = studentData;
 
-      // Now fetch this student's pending equipment
       db.query(
         `SELECT 
-          logID,
-          studentID,
-          studentName,
-          equipmentBorrowed AS equipment,
-          timestamp AS outTime,
-          dueOn,
-          pending,
-          returned,
-          returnedTimestamp AS inTime
-        FROM Logs
-        WHERE studentID = ? AND pending = TRUE AND returned = FALSE`,
+            logID,
+            studentID,
+            studentName,
+            equipmentBorrowed AS equipment,
+            timestamp AS outTime,
+            dueOn,
+            pending,
+            returned,
+            returnedTimestamp AS inTime
+         FROM Logs
+         WHERE studentID = ? AND pending = TRUE AND returned = FALSE`,
         [ashokaId],
         (logErr, results) => {
           if (logErr) return res.status(500).send("Database error");
 
-          // Format timestamps
           results.forEach((r) => {
             r.outTime = moment(r.outTime)
               .tz("Asia/Kolkata")
@@ -464,66 +468,117 @@ app.get("/getequipment", (req, res) => {
 
 app.post("/returnMany", (req, res) => {
   if (!req.session.student) {
-    return res.status(401).json({ success: false, error: "Not logged in" });
+    return res.redirect("/return_login");
   }
 
-  const { equipments } = req.body;
   const studentId = req.session.student.studentID;
+  const studentEmail = req.session.student.studentEmail;
   const returnTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 
-  if (!equipments || equipments.length === 0) {
-    return res.json({ success: false, error: "No items selected" });
-  }
+  let selected = req.body["equipments[]"] || req.body.equipments;
+
+  if (!selected) return res.redirect("/landing");
+
+  // Normalize to array
+  selected = Array.isArray(selected) ? selected : [selected];
+
+  // Remove whitespace + lowercase for unique matching
+  // BUT preserve original casing for display
+  const list = [
+    ...new Map(
+      selected.map((item) => [
+        item.toLowerCase().trim(), // key (case-insensitive)
+        item.trim(), // value (original)
+      ])
+    ).values(),
+  ];
+
+  // This will hold { equipment: "Name", inNum: X }
+  const returnedItems = [];
 
   let completed = 0;
   let hasError = false;
 
-  equipments.forEach((equipment) => {
+  // Process each unique equipment
+  list.forEach((equipmentName) => {
+    // STEP 1: Get ALL pending logs for this equipment
     db.query(
-      `SELECT * FROM Logs 
-       WHERE studentID = ? AND equipmentBorrowed = ? AND pending = TRUE AND returned = FALSE
-       ORDER BY timestamp ASC 
-       LIMIT 1`,
-      [studentId, equipment],
+      `SELECT logID
+       FROM Logs 
+       WHERE studentID = ?
+         AND LOWER(equipmentBorrowed) = LOWER(?)
+         AND pending = TRUE
+         AND returned = FALSE`,
+      [studentId, equipmentName],
       (err, rows) => {
-        if (err || rows.length === 0) {
-          console.error("DB fetch error:", err);
+        if (err) {
+          console.error("Query error:", err);
           hasError = true;
-          completed++;
-          if (completed === equipments.length)
-            return res.json({
-              success: !hasError,
-              error: hasError ? "Some returns failed" : null,
-            });
+          finish();
           return;
         }
 
-        const row = rows[0];
+        // No pending entries -> still show in success page with 0
+        if (rows.length === 0) {
+          returnedItems.push({ equipment: equipmentName, inNum: 0 });
+          finish();
+          return;
+        }
+
+        const qtyReturned = rows.length;
+        const logIDs = rows.map((r) => r.logID);
+
+        // STEP 2: Bulk update all matching logs
         db.query(
-          `UPDATE Logs 
-           SET pending = FALSE, 
-               returned = TRUE, 
-               returnedTimestamp = ?,
-               returnedByID = ?,
-               returnedByEmail = ?
-           WHERE logID = ?`,
-          [returnTime, studentId, req.session.student.studentEmail, row.logID],
+          `
+          UPDATE Logs
+          SET 
+            pending = FALSE,
+            returned = TRUE,
+            returnedTimestamp = ?,
+            returnedByID = ?,
+            returnedByEmail = ?
+          WHERE logID IN (${logIDs.map(() => "?").join(",")})
+          `,
+          [returnTime, studentId, studentEmail, ...logIDs],
           (updateErr) => {
             if (updateErr) {
-              console.error("DB update error:", updateErr);
+              console.error("Update error:", updateErr);
               hasError = true;
-            }
-            completed++;
-            if (completed === equipments.length)
-              res.json({
-                success: !hasError,
-                error: hasError ? "Some returns failed" : null,
+            } else {
+              // Success: push the summary item
+              returnedItems.push({
+                equipment: equipmentName,
+                inNum: qtyReturned,
               });
+            }
+
+            finish();
           }
         );
       }
     );
   });
+
+  // Track completion of async operations
+  function finish() {
+    completed++;
+    if (completed === list.length) {
+      if (hasError) {
+        return res.render("error", {
+          msg: "Some returns could not be processed.",
+          user: req.user?.name || "Guest",
+        });
+      }
+
+      // SUCCESS PAGE RENDER
+      return res.render("return_success", {
+        studentName: req.session.student.studentName,
+        equipment: returnedItems,
+        user: req.user?.name || "Guest",
+      });
+    }
+  }
 });
 
 app.post("/sports_request", (req, res) => {

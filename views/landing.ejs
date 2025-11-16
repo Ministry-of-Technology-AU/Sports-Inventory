@@ -1,51 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Landing Page</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style/landing.css" />
+    <link rel="stylesheet" href="/style/return-page.css" />
+    <link rel="stylesheet" href="/style/global.css" />
+    <style>
+      body {
+        background-color: var(--off-white);
+      }
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Landing Page</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
-    rel="stylesheet" />
-  <link rel="stylesheet" href="/style/landing.css" />
-  <link rel="stylesheet" href="/style/return-page.css" />
-  <link rel="stylesheet" href="/style/global.css" />
-  <style>
-    body {
-      background-color: var(--off-white);
-    }
+      .button-group {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        align-items: center;
+      }
 
-    .button-group {
-      display: flex;
-      gap: 15px;
-      justify-content: center;
-      align-items: center;
-    }
+      #returnAllBtn {
+        background: var(--primary-color);
+        color: var(--text-color-secondary);
+        border: none;
+        padding: 16px 36px;
+        font-size: 18px;
+        font-weight: 600;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
 
-    #returnAllBtn {
-      background: var(--primary-color);
-      color: var(--text-color-secondary);
-      border: none;
-      padding: 16px 36px;
-      font-size: 18px;
-      font-weight: 600;
-      border-radius: 10px;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
+      #returnAllBtn:hover {
+        background: var(--primary-color);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(13, 56, 98, 0.3);
+      }
+    </style>
+  </head>
 
-    #returnAllBtn:hover {
-      background: var(--primary-color);
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(13, 56, 98, 0.3);
-    }
-  </style>
-</head>
-
-<body>
-  <%- include("nav",{ activePage: "landing" , config: "admin" , userName: user }) %>
+  <body>
+    <%- include("nav",{ activePage: "landing" , config: "admin" , userName: user
+    }) %>
     <div class="box">
       <div class="up">
         <h1 class="details">
@@ -57,120 +59,98 @@
       </div>
 
       <% if (equipment.length===0) { %>
-        <p class="noPendingEquipment">No pending equipment</p>
-        <% } else { %>
-          <table border="1" cellpadding="5">
-            <thead>
-              <tr>
-                <th>Equipment</th>
-                <th>Quantity Borrowed</th>
-                <th>Checkout Time</th>
-                <th>Return</th>
-              </tr>
-            </thead>
-            <tbody>
-              <% equipment.forEach(function(item) { %>
-                <tr>
-                  <td>
-                    <%= item.equipment %>
-                  </td>
-                  <td>
-                    <%= item.outNum %>
-                  </td>
-                  <td>
-                    <%= item.outTime %>
-                  </td>
-                  <td>
-                    <label class="checkbox">
-                      <input class="equipment-checkbox" type="checkbox" value="<%= item.equipment %>" />
-                      <span class="checkmark"></span>
-                    </label>
-                  </td>
-                </tr>
-                <% }); %>
-            </tbody>
-          </table>
+      <p class="noPendingEquipment">No pending equipment</p>
+      <% } else { %>
+      <table border="1" cellpadding="5">
+        <thead>
+          <tr>
+            <th>Equipment</th>
+            <th>Quantity Borrowed</th>
+            <th>Checkout Time</th>
+            <th>Return</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% equipment.forEach(function(item) { %>
+          <tr>
+            <td><%= item.equipment %></td>
+            <td><%= item.outNum %></td>
+            <td><%= item.outTime %></td>
+            <td>
+              <label class="checkbox">
+                <input
+                  class="equipment-checkbox"
+                  type="checkbox"
+                  value="<%= item.equipment %>"
+                />
+                <span class="checkmark"></span>
+              </label>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
 
-          <br />
-          <% } %>
+      <br />
+      <% } %>
 
-            <div class="bottom">
-              <% if (equipment.length !=0) { %>
-                <div class="button-group">
-                  <button id="returnAllBtn">Return All</button>
-                  <button id="returnSelectedBtn">Return Selected</button>
-                </div>
-                <% }%>
-            </div>
+      <div class="bottom">
+        <% if (equipment.length !=0) { %>
+        <div class="button-group">
+          <button id="returnAllBtn">Return All</button>
+          <button id="returnSelectedBtn">Return Selected</button>
+        </div>
+        <% }%>
+      </div>
     </div>
 
     <script>
-      // Return Selected functionality
+      // Create form dynamically and POST (like /issue)
+      function submitReturnForm(equipments) {
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = "/returnMany";
+
+        equipments.forEach((eq) => {
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = "equipments[]";
+          input.value = eq;
+          form.appendChild(input);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
+      }
+
+      // Return Selected
       document
         .getElementById("returnSelectedBtn")
-        ?.addEventListener("click", async () => {
+        ?.addEventListener("click", () => {
           const selected = Array.from(
             document.querySelectorAll(".equipment-checkbox:checked")
           )
-            // ignore header checkbox (it has empty value)
-            .filter((cb) => cb.value.trim() !== "")
-            .map((cb) => cb.value);
+            .map((cb) => cb.value)
+            .filter((v) => v.trim() !== "");
 
           if (selected.length === 0) {
             alert("Please select at least one item to return.");
             return;
           }
 
-          try {
-            const res = await fetch("/returnMany", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ equipments: selected }),
-            });
-
-            const data = await res.json();
-
-            if (data.success) {
-              window.location.href = "/landing";
-            } else {
-              alert("Error: " + data.error);
-            }
-          } catch (err) {
-            alert("Network error: " + err.message);
-          }
+          submitReturnForm(selected);
         });
 
-      // Return All functionality
-      document
-        .getElementById("returnAllBtn")
-        ?.addEventListener("click", async () => {
-          if (!confirm("Are you sure you want to return all equipment?")) {
-            return;
-          }
+      // Return All
+      document.getElementById("returnAllBtn")?.addEventListener("click", () => {
+        if (!confirm("Are you sure you want to return all equipment?")) return;
 
-          // Get all equipment names from the table
-          const allEquipment = Array.from(
-            document.querySelectorAll(".equipment-checkbox")
-          ).map((cb) => cb.value);
+        const all = Array.from(document.querySelectorAll(".equipment-checkbox"))
+          .map((cb) => cb.value)
+          .filter((v) => v.trim() !== "");
 
-          try {
-            const res = await fetch("/returnMany", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ equipments: allEquipment }),
-            });
-
-            const data = await res.json();
-
-            if (data.success) {
-              window.location.href = "/landing";
-            } else {
-              alert("Error: " + data.error);
-            }
-          } catch (err) {
-            alert("Network error: " + err.message);
-          }
-        });
+        submitReturnForm(all);
+      });
     </script>
   </body>
 </html>
