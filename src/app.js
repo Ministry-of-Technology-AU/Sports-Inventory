@@ -162,11 +162,6 @@ function ensureAuthenticated(req, res, next) {
 app.set("views", path.join(__dirname, "../views"));
 app.set("view engine", "ejs");
 
-// Fix students.json path
-const students = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "../students.json"), "utf-8")
-);
-
 app.get(
   "/auth/google",
   passport.authenticate("google", { scope: ["profile", "email"] })
@@ -221,23 +216,20 @@ app.get("/", (req, res) => {
   });
 });
 
-app.get("/issue_login", (req, res) => {
-  res.render("issue_login", {
-    activePage: "issue",
-    user: req.user?.name || "Guest",
-  });
-});
-
 app.post("/issue_login", (req, res) => {
   const ashokaId = req.body.qrString?.trim();
-  const studentData = students.find(
-    (s) => String(s.AshokaId).trim() === ashokaId
-  );
 
-  if (!studentData) return res.status(404).send("Student not found");
-  console.log("Student Data:", studentData);
-  req.session.student = studentData;
-  res.redirect("/issue");
+  db.query(
+    "SELECT * FROM Students WHERE studentID = ?",
+    [ashokaId],
+    (err, rows) => {
+      if (err) return res.status(500).send("DB error");
+      if (!rows.length) return res.status(404).send("Student not found");
+
+      req.session.student = rows[0];
+      res.redirect("/issue");
+    }
+  );
 });
 
 function calculateAvailableEquipment(callback) {
@@ -299,7 +291,7 @@ app.post("/issue", (req, res) => {
   // First, get the student email from the Students table
   db.query(
     "SELECT studentEmail FROM Students WHERE studentID = ?",
-    [req.session.student.AshokaId],
+    [req.session.student.studentID],
     (emailErr, emailResults) => {
       if (emailErr || emailResults.length === 0) {
         console.error("Error fetching student email:", emailErr);
@@ -335,9 +327,9 @@ app.post("/issue", (req, res) => {
           [
             currentTime,
             item,
-            req.session.student.AshokaId,
+            req.session.student.studentID,
             studentEmail,
-            req.session.student.name,
+            req.session.student.studentName,
             dueDate,
           ],
           (insertErr) => {
@@ -359,7 +351,7 @@ app.post("/issue", (req, res) => {
             if (completed === equipmentList.length && !hasError) {
               // Render success page with equipment details
               res.render("success", {
-                studentName: req.session.student.name,
+                studentName: req.session.student.studentName,
                 equipment: issuedEquipment,
                 user: req.user?.name || "Guest",
               });
@@ -380,14 +372,17 @@ app.get("/return_login", (req, res) => {
 
 app.post("/return_login", (req, res) => {
   const ashokaId = req.body.qrString?.trim();
-  const studentData = students.find(
-    (s) => String(s.AshokaId).trim() === ashokaId
+  db.query(
+    "SELECT * FROM Students WHERE studentID = ?",
+    [ashokaId],
+    (err, rows) => {
+      if (err) return res.status(500).send("DB error");
+      if (!rows.length) return res.status(404).send("Student not found");
+
+      req.session.student = rows[0];
+      res.redirect("/landing");
+    }
   );
-
-  if (!studentData) return res.status(404).send("Student not found");
-
-  req.session.student = studentData;
-  res.redirect("/landing");
 });
 
 app.get("/landing", (req, res) => {
@@ -395,7 +390,7 @@ app.get("/landing", (req, res) => {
     return res.redirect("/return_login");
   }
   res.render("landing_redirect", {
-    ashokaId: req.session.student.AshokaId,
+    ashokaId: req.session.student.studentID,
     activePage: "landing",
     user: req.user?.name || "Guest",
   });
@@ -403,9 +398,7 @@ app.get("/landing", (req, res) => {
 
 app.post("/landing", async (req, res) => {
   const ashokaId = String(req.body.qrString).trim();
-  const studentData = students.find((student) => {
-    return String(student.AshokaId).trim() === String(ashokaId).trim();
-  });
+  const studentData = req.session.student;
 
   if (!studentData) {
     return res.status(404).send("Student not found");
@@ -466,7 +459,7 @@ app.post("/returnMany", (req, res) => {
   }
 
   const { equipments } = req.body;
-  const studentId = req.session.student.AshokaId;
+  const studentId = req.session.student.studentID;
   const returnTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 
   if (!equipments || equipments.length === 0) {
@@ -505,12 +498,7 @@ app.post("/returnMany", (req, res) => {
                returnedByID = ?,
                returnedByEmail = ?
            WHERE logID = ?`,
-          [
-            returnTime,
-            req.user?.id || studentId,
-            req.user?.email || req.session.student.email,
-            row.logID,
-          ],
+          [returnTime, studentId, req.session.student.studentEmail, row.logID],
           (updateErr) => {
             if (updateErr) {
               console.error("DB update error:", updateErr);
