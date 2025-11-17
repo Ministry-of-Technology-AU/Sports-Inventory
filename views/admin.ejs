@@ -46,6 +46,12 @@
             </button></span
           >
           <span
+            ><i class="fa-solid fa-chain-broken"></i>
+            <button type="button" class="damaged-equipment-btn">
+              Damaged Equipment
+            </button></span
+          >
+          <span
             ><i class="fa-solid fa-square-poll-vertical"></i
             ><a href="/statistics">View Statistics</a></span
           >
@@ -141,6 +147,37 @@
             </tbody>
           </table>
         </div>
+        <div class="damaged-equipment-section" style="display: none">
+          <h2>Damaged Equipment Reports</h2>
+          <% if(damagedEquipmentList.length === 0) { %>
+            <p>No Damaged Equipment</p>
+          <% } else { %>
+          <table border="1" cellpadding="5">
+            <thead>
+              <tr>
+                <th>Equipment</th>
+                <th>Student ID</th>
+                <th>Student Name</th>
+                <th>Student Email</th>
+                <th>Issued On</th>
+                <th>Returned On</th>
+              </tr>
+            </thead>
+            <tbody id="damaged-equipment-table-body">
+              <% damagedEquipmentList.forEach(function(item) { %>
+              <tr>
+                <td><%= item.equipment %></td>
+                <td><%= item.studentID %></td>
+                <td><%= item.studentName %></td>
+                <td><%= item.studentEmail %></td>
+                <td><%= item.issuedOn %></td>
+                <td><%= item.returnedOn %></td>
+              </tr>
+              <% }) %>
+            </tbody>
+          </table>
+          <% } %>
+        </div>
       </div>
     </div>
 
@@ -153,6 +190,8 @@
         section_1.style.display = "none";
         const section_2 = document.querySelector(".view-offences-section");
         section_2.style.display = "none";
+        const section_3 = document.querySelector(".damaged-equipment-section");
+        section_3.style.display = "none";
         const section = document.querySelector(".update-inventory-section");
         section.style.display = "block";
       });
@@ -164,6 +203,8 @@
         section_1.style.display = "none";
         const section_2 = document.querySelector(".view-offences-section");
         section_2.style.display = "none";
+        const section_3 = document.querySelector(".damaged-equipment-section");
+        section_3.style.display = "none";
         const section = document.querySelector(".sports-requests");
         section.style.display = "block";
       });
@@ -172,10 +213,22 @@
       .addEventListener("click", function () {
         const section_1 = document.querySelector(".update-inventory-section");
         section_1.style.display = "none";
-        const section = document.querySelector(".sports-requests");
-        section.style.display = "none";
-        const section_2 = document.querySelector(".view-offences-section");
-        section_2.style.display = "block";
+        const section_2 = document.querySelector(".sports-requests");
+        section_2.style.display = "none";
+        const section_3 = document.querySelector(".damaged-equipment-section");
+        section_3.style.display = "none";
+        const section = document.querySelector(".view-offences-section");
+        section.style.display = "block";
+      });
+      document.querySelector(".damaged-equipment-btn").addEventListener("click", function () {
+        const section_1 = document.querySelector(".update-inventory-section");
+        section_1.style.display = "none";
+        const section_2 = document.querySelector(".sports-requests");
+        section_2.style.display = "none";
+        const section_3 = document.querySelector(".view-offences-section");
+        section_3.style.display = "none";
+        const section = document.querySelector(".damaged-equipment-section");
+        section.style.display = "block";
       });
   </script>
 

@@ -475,110 +475,107 @@ app.post("/returnMany", (req, res) => {
   const studentEmail = req.session.student.studentEmail;
   const returnTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 
-  let selected = req.body["equipments[]"] || req.body.equipments;
+  // Returned logIDs
+  let returnedLogIDs =
+    req.body["logsReturned[]"] || req.body.logsReturned || [];
+  returnedLogIDs = Array.isArray(returnedLogIDs)
+    ? returnedLogIDs
+    : [returnedLogIDs];
 
-  if (!selected) return res.redirect("/landing");
+  // Damaged logIDs
+  let damagedLogIDs = req.body["logsDamaged[]"] || req.body.logsDamaged || [];
+  damagedLogIDs = Array.isArray(damagedLogIDs)
+    ? damagedLogIDs
+    : [damagedLogIDs];
 
-  // Normalize to array
-  selected = Array.isArray(selected) ? selected : [selected];
+  if (returnedLogIDs.length === 0) {
+    return res.redirect("/landing");
+  }
 
-  // Remove whitespace + lowercase for unique matching
-  // BUT preserve original casing for display
-  const list = [
-    ...new Map(
-      selected.map((item) => [
-        item.toLowerCase().trim(), // key (case-insensitive)
-        item.trim(), // value (original)
-      ])
-    ).values(),
-  ];
-
-  // This will hold { equipment: "Name", inNum: X }
   const returnedItems = [];
-
   let completed = 0;
   let hasError = false;
 
-  // Process each unique equipment
-  list.forEach((equipmentName) => {
-    // STEP 1: Get ALL pending logs for this equipment
+  returnedLogIDs.forEach((logID) => {
+    const isDamaged = damagedLogIDs.includes(String(logID));
+
     db.query(
-      `SELECT logID
-       FROM Logs 
-       WHERE studentID = ?
-         AND LOWER(equipmentBorrowed) = LOWER(?)
-         AND pending = TRUE
-         AND returned = FALSE`,
-      [studentId, equipmentName],
-      (err, rows) => {
+      `
+      UPDATE Logs
+      SET 
+        pending = FALSE,
+        returned = TRUE,
+        returnedTimestamp = ?,
+        returnedByID = ?,
+        returnedByEmail = ?,
+        damaged = ?
+      WHERE logID = ?
+      `,
+      [returnTime, studentId, studentEmail, isDamaged ? "Yes" : "No", logID],
+      (err) => {
         if (err) {
-          console.error("Query error:", err);
+          console.error("Update error:", err);
           hasError = true;
-          finish();
-          return;
+        } else {
+          returnedItems.push({
+            logID,
+            damaged: isDamaged ? "Yes" : "No",
+          });
         }
 
-        // No pending entries -> still show in success page with 0
-        if (rows.length === 0) {
-          returnedItems.push({ equipment: equipmentName, inNum: 0 });
-          finish();
-          return;
-        }
+        completed++;
 
-        const qtyReturned = rows.length;
-        const logIDs = rows.map((r) => r.logID);
+        if (completed === returnedLogIDs.length) {
+          if (hasError) {
+            return res.render("error", {
+              msg: "Some items could not be returned.",
+              user: req.user?.name || "Guest",
+            });
+          }
 
-        // STEP 2: Bulk update all matching logs
-        db.query(
-          `
-          UPDATE Logs
-          SET 
-            pending = FALSE,
-            returned = TRUE,
-            returnedTimestamp = ?,
-            returnedByID = ?,
-            returnedByEmail = ?
-          WHERE logID IN (${logIDs.map(() => "?").join(",")})
-          `,
-          [returnTime, studentId, studentEmail, ...logIDs],
-          (updateErr) => {
-            if (updateErr) {
-              console.error("Update error:", updateErr);
-              hasError = true;
-            } else {
-              // Success: push the summary item
-              returnedItems.push({
-                equipment: equipmentName,
-                inNum: qtyReturned,
+          // Group results by equipment name
+          db.query(
+            `SELECT logID, equipmentBorrowed AS equipment
+   FROM Logs
+   WHERE logID IN (${returnedLogIDs.map(() => "?").join(",")})`,
+            returnedLogIDs,
+            (err, rows) => {
+              if (err) {
+                console.error("Grouping error:", err);
+                return res.render("error", {
+                  msg: "Error preparing return summary.",
+                  user: req.user?.name || "Guest",
+                });
+              }
+
+              // Build grouped list
+              const grouped = {};
+              rows.forEach((r) => {
+                if (!grouped[r.equipment]) {
+                  grouped[r.equipment] = {
+                    equipment: r.equipment,
+                    quantity: 0,
+                    damaged: 0,
+                  };
+                }
+                grouped[r.equipment].quantity++;
+
+                if (damagedLogIDs.includes(String(r.logID))) {
+                  grouped[r.equipment].damaged++;
+                }
+              });
+
+              return res.render("return_success", {
+                studentName: req.session.student.studentName,
+                equipment: Object.values(grouped),
+                user: req.user?.name || "Guest",
               });
             }
-
-            finish();
-          }
-        );
+          );
+        }
       }
     );
   });
-
-  // Track completion of async operations
-  function finish() {
-    completed++;
-    if (completed === list.length) {
-      if (hasError) {
-        return res.render("error", {
-          msg: "Some returns could not be processed.",
-          user: req.user?.name || "Guest",
-        });
-      }
-
-      // SUCCESS PAGE RENDER
-      return res.render("return_success", {
-        studentName: req.session.student.studentName,
-        equipment: returnedItems,
-        user: req.user?.name || "Guest",
-      });
-    }
-  }
 });
 
 app.post("/sports_request", (req, res) => {
@@ -749,6 +746,7 @@ app.get("/team_landing", (req, res) => {
 });
 
 app.get("/admin", (req, res) => {
+  // Fetch Inventory
   db.query("SELECT * FROM Equipment", (err, results) => {
     if (err) {
       console.error("Database error:", err);
@@ -763,16 +761,15 @@ app.get("/admin", (req, res) => {
       inUseQuantity: row.inUseQuantity,
     }));
 
-    console.log("Equipment Data:", equipmentData);
-    // Query offences list
+    // Fetch Offence List
     db.query(
       `SELECT studentID, studentName, studentEmail, borrowedNotOutstanding,
               borrowedOutstanding, offences
        FROM Students WHERE offences > 0`,
-      (err2, offenceQueryResults) => {
+      (err2, offenceRows) => {
         if (err2) return res.status(500).send("Database error");
 
-        const offenceResults = offenceQueryResults.map((row) => ({
+        const offenceList = offenceRows.map((row) => ({
           studentID: row.studentID,
           studentName: row.studentName,
           studentEmail: row.studentEmail,
@@ -781,12 +778,44 @@ app.get("/admin", (req, res) => {
           offences: row.offences,
         }));
 
-        res.render("admin", {
-          activePage: "admin",
-          user: req.user?.name || "Guest",
-          equipment: equipmentData,
-          offenceList: offenceResults,
-        });
+        // Fetch Damaged Equipment
+        db.query(
+          `SELECT 
+              equipmentBorrowed AS equipment,
+              studentID,
+              studentName,
+              studentEmail,
+              timestamp AS issuedOn,
+              returnedTimestamp AS returnedOn
+           FROM Logs
+           WHERE damaged = 'Yes'`,
+          (err3, damagedRows) => {
+            if (err3) return res.status(500).send("Database error");
+
+            const damagedEquipmentList = damagedRows.map((row) => ({
+              equipment: row.equipment,
+              studentID: row.studentID,
+              studentName: row.studentName,
+              studentEmail: row.studentEmail,
+              issuedOn: moment(row.issuedOn)
+                .tz("Asia/Kolkata")
+                .format("DD-MM-YYYY HH:mm"),
+              returnedOn: row.returnedOn
+                ? moment(row.returnedOn)
+                    .tz("Asia/Kolkata")
+                    .format("DD-MM-YYYY HH:mm")
+                : "Not Returned",
+            }));
+
+            res.render("admin", {
+              activePage: "admin",
+              user: req.user?.name || "Guest",
+              equipment: equipmentData,
+              offenceList,
+              damagedEquipmentList,
+            });
+          }
+        );
       }
     );
   });

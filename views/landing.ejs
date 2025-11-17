@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="/style/landing.css" />
     <link rel="stylesheet" href="/style/return-page.css" />
     <link rel="stylesheet" href="/style/global.css" />
+
     <style>
       body {
         background-color: var(--off-white);
@@ -48,6 +49,7 @@
   <body>
     <%- include("nav",{ activePage: "landing" , config: "admin" , userName: user
     }) %>
+
     <div class="box">
       <div class="up">
         <h1 class="details">
@@ -61,27 +63,54 @@
       <% if (equipment.length===0) { %>
       <p class="noPendingEquipment">No pending equipment</p>
       <% } else { %>
+
       <table border="1" cellpadding="5">
         <thead>
           <tr>
             <th>Equipment</th>
-            <th>Quantity Borrowed</th>
+
             <th>Checkout Time</th>
-            <th>Return</th>
+            <th>Damaged</th>
+            <!-- SELECT ALL CHECKBOX ADDED HERE -->
+            <th class="return-column checkbox-col">
+              <div class="head-return">
+                <span>Return All</span>
+                <label class="checkbox">
+                  <input id="selectAll" type="checkbox" />
+                  <span class="checkmark"></span>
+                </label>
+              </div>
+            </th>
           </tr>
         </thead>
+
         <tbody>
           <% equipment.forEach(function(item) { %>
           <tr>
             <td><%= item.equipment %></td>
-            <td><%= item.outNum %></td>
             <td><%= item.outTime %></td>
-            <td>
+
+            <!-- Damaged Checkbox -->
+            <td class="return-column checkbox-col">
+              <label class="checkbox">
+                <input
+                  class="damaged-checkbox"
+                  type="checkbox"
+                  data-eq="<%= item.equipment %>"
+                  value="<%= item.logID %>"
+                />
+                <span class="checkmark"></span>
+              </label>
+            </td>
+
+            <!-- Return Checkbox -->
+            <td class="return-column checkbox-col">
               <label class="checkbox">
                 <input
                   class="equipment-checkbox"
                   type="checkbox"
-                  value="<%= item.equipment %>"
+                  data-eq="<%= item.equipment %>"
+                  value="<%= item.logID %>"
                 />
                 <span class="checkmark"></span>
               </label>
@@ -105,17 +134,31 @@
     </div>
 
     <script>
-      // Create form dynamically and POST (like /issue)
-      function submitReturnForm(equipments) {
+      // POST Return Form Builder
+      function submitReturnForm(selectedLogIDs) {
         const form = document.createElement("form");
         form.method = "POST";
         form.action = "/returnMany";
 
-        equipments.forEach((eq) => {
+        // RETURNED logIDs
+        selectedLogIDs.forEach((id) => {
           const input = document.createElement("input");
           input.type = "hidden";
-          input.name = "equipments[]";
-          input.value = eq;
+          input.name = "logsReturned[]";
+          input.value = id;
+          form.appendChild(input);
+        });
+
+        // DAMAGED logIDs
+        const damagedIDs = Array.from(
+          document.querySelectorAll(".damaged-checkbox:checked")
+        ).map((cb) => cb.value);
+
+        damagedIDs.forEach((id) => {
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = "logsDamaged[]";
+          input.value = id;
           form.appendChild(input);
         });
 
@@ -151,6 +194,30 @@
 
         submitReturnForm(all);
       });
+
+      // -------------------------
+      // SELECT ALL CHECKBOX LOGIC
+      // -------------------------
+      const selectAllBox = document.getElementById("selectAll");
+      const rowCheckboxes = document.querySelectorAll(".equipment-checkbox");
+
+      if (selectAllBox) {
+        // When "Select All" changes -> toggle all row checkboxes
+        selectAllBox.addEventListener("change", () => {
+          const checked = selectAllBox.checked;
+          rowCheckboxes.forEach((cb) => (cb.checked = checked));
+        });
+
+        // When any row checkbox changes -> sync Select All box
+        rowCheckboxes.forEach((cb) => {
+          cb.addEventListener("change", () => {
+            const allChecked = Array.from(rowCheckboxes).every(
+              (cb2) => cb2.checked
+            );
+            selectAllBox.checked = allChecked;
+          });
+        });
+      }
     </script>
   </body>
 </html>

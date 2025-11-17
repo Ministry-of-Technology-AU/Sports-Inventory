@@ -17,6 +17,11 @@
       src="https://kit.fontawesome.com/2cacd0cbd0.js"
       crossorigin="anonymous"
     ></script>
+    <style>
+      .table-header th {
+        text-align: center;
+      }
+    </style>
   </head>
 
   <body>
@@ -36,16 +41,18 @@
       <% } else { %>
       <table border="1" cellpadding="5">
         <thead>
-          <tr>
+          <tr class="table-header">
             <th>Equipment</th>
-            <th>Quantity Returned</th>
+            <th>Returned</th>
+            <th>Damaged</th>
           </tr>
         </thead>
         <tbody>
           <% equipment.forEach(function(item) { %>
           <tr>
             <td><%= item.equipment %></td>
-            <td><%= item.inNum %></td>
+            <td><%= item.quantity %></td>
+            <td><%= item.damaged %></td>
           </tr>
           <% }); %>
         </tbody>
