@@ -32,21 +32,11 @@ const dbConfig = {
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  connectTimeout: 30000, // 30 seconds for Railway
   enableKeepAlive: true,
-  keepAliveInitialDelay: 0,
-  // Railway MySQL 9.4.0 uses self-signed SSL certificates
-  // Must set rejectUnauthorized: false to accept them
-  ssl: process.env.DB_HOST?.includes('railway') || process.env.DB_HOST?.includes('rlwy.net')
-    ? {
-      rejectUnauthorized: false,  // Accept self-signed certs
-      minVersion: 'TLSv1.2',      // MySQL 9.4.0 requirement
-      maxVersion: 'TLSv1.3'       // Support latest TLS
-    }
-    : undefined
+  keepAliveInitialDelay: 0
 };
 
-console.log("Creating Railway MySQL connection pool...");
+console.log("Creating MySQL connection pool...");
 const db = mysql.createPool(dbConfig);
 
 // Test connection on startup with retry logic
@@ -60,7 +50,7 @@ async function testDatabaseConnection(retries = 3, delay = 2000) {
         });
       });
 
-      console.log("✅ Connected to Railway MySQL database with connection pool");
+      console.log("✅ Connected to MySQL database with connection pool");
       connection.release();
       return true;
     } catch (err) {
@@ -75,7 +65,7 @@ async function testDatabaseConnection(retries = 3, delay = 2000) {
           ssl: dbConfig.ssl ? 'enabled' : 'disabled'
         });
         console.warn("⚠️ App will continue but database operations may fail");
-        console.warn("💡 Tip: Check if your Railway MySQL service is active and not paused");
+        console.warn("💡 Tip: Check if your MySQL service is running");
         return false;
       }
 
