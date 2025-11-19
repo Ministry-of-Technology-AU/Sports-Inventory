@@ -93,3 +93,11 @@ ADD COLUMN borrowedNotOutstanding INT DEFAULT 0,
 ADD COLUMN borrowedOutstanding INT DEFAULT 0,
 ADD COLUMN offences INT DEFAULT 0,
 ADD COLUMN sportsTeamAuthorised BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE SportsRequests ADD COLUMN issued BOOLEAN DEFAULT FALSE;
+
+INSERT INTO SportsRequests (studentEmail, studentName, equipment, quantity, startDate, endDate, approvedOn, issued)
+VALUES 
+('vaani.goenka_ug2024@ashoka.edu.in', 'Vaani Goenka', 'Badminton Racket', 1, '2025-11-15', '2025-12-15', CURRENT_TIMESTAMP, 0),
+('vaani.goenka_ug2024@ashoka.edu.in', 'Vaani Goenka', 'Basketball', 2, '2025-11-15', '2025-12-15', CURRENT_TIMESTAMP, 0),
+('vaani.goenka_ug2024@ashoka.edu.in', 'Vaani Goenka', 'Football', 1, '2025-11-15', '2025-12-15', CURRENT_TIMESTAMP, 0);

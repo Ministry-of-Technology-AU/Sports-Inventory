@@ -49,8 +49,12 @@
     <div class="box">
       <div class="up">
         <h1 class="details">
-          <p><%= student.name %></p>
-          <p><%= student.AshokaId %></p>
+          <p>
+            <%= student.name %>
+          </p>
+          <p>
+            <%= student.AshokaId %>
+          </p>
         </h1>
         <h1>Pending Equipment Borrowed</h1>
         <h1 class="fake">H</h1>
@@ -82,7 +86,8 @@
                   </td>
                   <td>
                     <label class="checkbox">
-                      <input class="equipment-checkbox" type="checkbox" value="<%= item.equipment %>" />
+                      <input class="equipment-checkbox" type="checkbox" value="<%= item.equipment %>"
+                        data-quantity="<%= item.outNum %>" />
                       <span class="checkmark"></span>
                     </label>
                   </td>
@@ -111,10 +116,10 @@
         ?.addEventListener("click", async () => {
           const selected = Array.from(
             document.querySelectorAll(".equipment-checkbox:checked")
-          )
-            // ignore header checkbox (it has empty value)
-            .filter((cb) => cb.value.trim() !== "")
-            .map((cb) => cb.value);
+          ).map((cb) => ({
+            equipment: cb.value,
+            outNum: cb.dataset.quantity
+          }));
 
           if (selected.length === 0) {
             alert("Please select at least one item to return.");
@@ -125,13 +130,27 @@
             const res = await fetch("/returnMany", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ equipments: selected }),
+              body: JSON.stringify({ equipments: selected.map(s => s.equipment) }),
             });
 
             const data = await res.json();
 
             if (data.success) {
-              window.location.href = "/landing";
+              // Call success endpoint with returned equipment data
+              const successRes = await fetch("/success", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  issuedEquipment: selected,
+                  name: "<%= student.name %>",
+                  mode: "returned"
+                }),
+              });
+
+              const successHtml = await successRes.text();
+              document.open();
+              document.write(successHtml);
+              document.close();
             } else {
               alert("Error: " + data.error);
             }
@@ -148,22 +167,39 @@
             return;
           }
 
-          // Get all equipment names from the table
+          // Get all equipment names and quantities from the table
           const allEquipment = Array.from(
             document.querySelectorAll(".equipment-checkbox")
-          ).map((cb) => cb.value);
+          ).map((cb) => ({
+            equipment: cb.value,
+            outNum: cb.dataset.quantity
+          }));
 
           try {
             const res = await fetch("/returnMany", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ equipments: allEquipment }),
+              body: JSON.stringify({ equipments: allEquipment.map(e => e.equipment) }),
             });
 
             const data = await res.json();
 
             if (data.success) {
-              window.location.href = "/landing";
+              // Call success endpoint with returned equipment data
+              const successRes = await fetch("/success", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  issuedEquipment: allEquipment,
+                  name: "<%= student.name %>",
+                  mode: "returned"
+                }),
+              });
+
+              const successHtml = await successRes.text();
+              document.open();
+              document.write(successHtml);
+              document.close();
             } else {
               alert("Error: " + data.error);
             }
@@ -172,5 +208,6 @@
           }
         });
     </script>
-  </body>
+</body>
+
 </html>

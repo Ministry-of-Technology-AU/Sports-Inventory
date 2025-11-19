@@ -17,7 +17,7 @@
     <%- include("nav",{ activePage: "team-landing" , config:"admin", userName: user }) %>
         <div class="box">
             <h1>Sports Team Issue</h1>
-            <form action="/return_login" method="POST">
+            <form action="/issue_team" method="GET">
                 <input type="text" id="qrString" name="qrString" placeholder="Scan Your ID" required />
                 <button type="submit">Submit</button>
             </form>
