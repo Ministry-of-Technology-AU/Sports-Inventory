@@ -17,13 +17,13 @@
 </head>
 
 <body>
-    <%- include("nav",{ activePage: "issue" , config:"admin", userName: user }) %>
+    <%- include("nav",{ activePage: "success" , config:"admin", userName: user }) %>
         <div class="box">
             <i class="fa-solid fa-circle-check" style="color: #63E6BE; font-size: 100px; margin-bottom: 20px;"></i>
-            <h1>Equipment issued for <br>
-                <span style="color: var(--primary-color)">
-                    <%= studentName %>
-                </span>
+            <h1>Equipment <%= mode %> for <br>
+                    <span style="color: var(--primary-color)">
+                        <%= studentName %>
+                    </span>
             </h1>
             <% if (equipment.length===0) { %>
                 <p class="noPendingEquipment">No pending equipment</p>

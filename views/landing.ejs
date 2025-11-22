@@ -63,54 +63,28 @@
       <% if (equipment.length===0) { %>
       <p class="noPendingEquipment">No pending equipment</p>
       <% } else { %>
-
       <table border="1" cellpadding="5">
         <thead>
           <tr>
             <th>Equipment</th>
-
+            <th>Quantity Borrowed</th>
             <th>Checkout Time</th>
-            <th>Damaged</th>
-            <!-- SELECT ALL CHECKBOX ADDED HERE -->
-            <th class="return-column checkbox-col">
-              <div class="head-return">
-                <span>Return All</span>
-                <label class="checkbox">
-                  <input id="selectAll" type="checkbox" />
-                  <span class="checkmark"></span>
-                </label>
-              </div>
-            </th>
+            <th>Return</th>
           </tr>
         </thead>
-
         <tbody>
           <% equipment.forEach(function(item) { %>
           <tr>
             <td><%= item.equipment %></td>
+            <td><%= item.outNum %></td>
             <td><%= item.outTime %></td>
-
-            <!-- Damaged Checkbox -->
-            <td class="return-column checkbox-col">
-              <label class="checkbox">
-                <input
-                  class="damaged-checkbox"
-                  type="checkbox"
-                  data-eq="<%= item.equipment %>"
-                  value="<%= item.logID %>"
-                />
-                <span class="checkmark"></span>
-              </label>
-            </td>
-
-            <!-- Return Checkbox -->
-            <td class="return-column checkbox-col">
+            <td>
               <label class="checkbox">
                 <input
                   class="equipment-checkbox"
                   type="checkbox"
-                  data-eq="<%= item.equipment %>"
-                  value="<%= item.logID %>"
+                  value="<%= item.equipment %>"
+                  data-quantity="<%= item.outNum %>"
                 />
                 <span class="checkmark"></span>
               </label>
@@ -172,50 +146,96 @@
         ?.addEventListener("click", () => {
           const selected = Array.from(
             document.querySelectorAll(".equipment-checkbox:checked")
-          )
-            .map((cb) => cb.value)
-            .filter((v) => v.trim() !== "");
+          ).map((cb) => ({
+            equipment: cb.value,
+            outNum: cb.dataset.quantity
+          }));
 
           if (selected.length === 0) {
             alert("Please select at least one item to return.");
             return;
           }
 
-          submitReturnForm(selected);
+          try {
+            const res = await fetch("/returnMany", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ equipments: selected.map(s => s.equipment) }),
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+              // Call success endpoint with returned equipment data
+              const successRes = await fetch("/success", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  issuedEquipment: selected,
+                  name: "<%= student.name %>",
+                  mode: "returned"
+                }),
+              });
+
+              const successHtml = await successRes.text();
+              document.open();
+              document.write(successHtml);
+              document.close();
+            } else {
+              alert("Error: " + data.error);
+            }
+          } catch (err) {
+            alert("Network error: " + err.message);
+          }
         });
 
-      // Return All
-      document.getElementById("returnAllBtn")?.addEventListener("click", () => {
-        if (!confirm("Are you sure you want to return all equipment?")) return;
+      // Return All functionality
+      document
+        .getElementById("returnAllBtn")
+        ?.addEventListener("click", async () => {
+          if (!confirm("Are you sure you want to return all equipment?")) {
+            return;
+          }
 
-        const all = Array.from(document.querySelectorAll(".equipment-checkbox"))
-          .map((cb) => cb.value)
-          .filter((v) => v.trim() !== "");
+          // Get all equipment names and quantities from the table
+          const allEquipment = Array.from(
+            document.querySelectorAll(".equipment-checkbox")
+          ).map((cb) => ({
+            equipment: cb.value,
+            outNum: cb.dataset.quantity
+          }));
 
-        submitReturnForm(all);
-      });
+          try {
+            const res = await fetch("/returnMany", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ equipments: allEquipment.map(e => e.equipment) }),
+            });
 
-      // -------------------------
-      // SELECT ALL CHECKBOX LOGIC
-      // -------------------------
-      const selectAllBox = document.getElementById("selectAll");
-      const rowCheckboxes = document.querySelectorAll(".equipment-checkbox");
+            const data = await res.json();
 
-      if (selectAllBox) {
-        // When "Select All" changes -> toggle all row checkboxes
-        selectAllBox.addEventListener("change", () => {
-          const checked = selectAllBox.checked;
-          rowCheckboxes.forEach((cb) => (cb.checked = checked));
-        });
+            if (data.success) {
+              // Call success endpoint with returned equipment data
+              const successRes = await fetch("/success", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  issuedEquipment: allEquipment,
+                  name: "<%= student.name %>",
+                  mode: "returned"
+                }),
+              });
 
-        // When any row checkbox changes -> sync Select All box
-        rowCheckboxes.forEach((cb) => {
-          cb.addEventListener("change", () => {
-            const allChecked = Array.from(rowCheckboxes).every(
-              (cb2) => cb2.checked
-            );
-            selectAllBox.checked = allChecked;
-          });
+              const successHtml = await successRes.text();
+              document.open();
+              document.write(successHtml);
+              document.close();
+            } else {
+              alert("Error: " + data.error);
+            }
+          } catch (err) {
+            alert("Network error: " + err.message);
+          }
         });
       }
     </script>

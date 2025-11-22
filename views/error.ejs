@@ -16,14 +16,28 @@
         body {
             background-color: var(--off-white);
         }
+
+        p {
+            font-size: 24px;
+            font-weight: bold;
+
+        }
+
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: 30px;
+        }
     </style>
 </head>
 
 <body>
-    <div class="box">
-        <h1>ERROR!</h1>
-    </div>
-    </div>
+    <%- include("nav",{ activePage: "error" , config:"admin", userName: user }) %>
+        <div class="box">
+            <h1>⚠️ ERROR</h1>
+            <p>
+                <%= typeof errorMsg !=='undefined' ? errorMsg : 'An error occurred' %>
+            </p>
+        </div>
 
 </body>
 
