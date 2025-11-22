@@ -224,41 +224,16 @@ app.get("/issue_login", (req, res) => {
 
 app.post("/issue_login", (req, res) => {
   const ashokaId = req.body.qrString?.trim();
-  const studentData = students.find(
-    (s) => String(s.AshokaId).trim() === ashokaId
-  );
 
-  if (!studentData) return res.status(404).send("Student not found");
-  console.log("Student Data:", studentData);
-  req.session.student = studentData;
-  res.redirect("/issue");
-});
-
-app.post("/issue_login_sports", (req, res) => {
-  const ashokaId = req.body.qrString?.trim();
-  // In the Students table, check under the column sportsTeamAuthorised
-  // If yes, redirected to endpoint /issue_login 
-  // Else, render error page with message "not sports team authorised"
   db.query(
-    "SELECT sportsTeamAuthorised FROM Students WHERE AshokaId = ?",
+    "SELECT * FROM Students WHERE studentID = ?",
     [ashokaId],
-    (err, results) => {
-      if (err) {
-        console.error("Database error:", err);
-        return res.status(500).send("Database error");
-      }
+    (err, rows) => {
+      if (err) return res.status(500).send("DB error");
+      if (!rows.length) return res.status(404).send("Student not found");
 
-      if (results.length === 0) {
-        return res.status(404).send("Student not found");
-      }
-
-      const isAuthorised = results[0].sportsTeamAuthorised;
-
-      if (isAuthorised) {
-        res.redirect("/issue_login");
-      } else {
-        res.render("error", { msg: "Unauthorized: You are not authorised as a sports team member." });
-      }
+      req.session.student = rows[0];
+      res.redirect("/issue");
     }
   );
 });
@@ -292,139 +267,28 @@ function calculateAvailableEquipment(callback) {
   });
 }
 
-function getInUseEquipment(callback) {
-  // select inUseQuantity from table Equipment
-  const query = `
-    SELECT 
-      equipment,
-      inUseQuantity as inUseCount
-      from Equipment
-  `;
-
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error("Database error:", err);
-      return callback(err, null);
-    }
-
-    const inUseItems = {};
-    results.forEach(row => {
-      inUseItems[row.equipment] = row.inUseCount;
-    });
-
-    callback(null, inUseItems);
-  });
-}
-
-
-// Sports team issue endpoint
-app.get("/issue_team", (req, res) => {
-  getInUseEquipment((err, totalItems) => {
-    if (err) {
-      return res.status(500).send("Error calculating in use equipment");
-    }
-
-    // get the email by querying the Students table on AshokaId
-    db.query(
-      "SELECT studentEmail FROM Students WHERE studentID = ?",
-      [req.session.student.AshokaId],
-      (emailErr, emailResults) => {
-        if (emailErr || emailResults.length === 0) {
-          console.error("Error fetching student email:", emailErr);
-          return res.status(500).send("Could not find student email");
-        }
-
-        const studentEmail = emailResults[0].studentEmail;
-        const studentName = req.session.student.name;
-        const currentDate = new Date().toISOString().split('T')[0];
-
-        console.log("Querying with information: ", studentEmail, studentName, currentDate);
-
-        // Check for valid sports request
-        db.query(
-          `SELECT equipment, quantity, startDate, endDate, approvedOn 
-           FROM SportsRequests 
-           WHERE studentEmail = ? 
-           AND studentName = ? 
-           AND startDate <= ? 
-           AND endDate >= ? 
-           AND (issued IS NULL OR issued = FALSE)`,
-          [studentEmail, studentName, currentDate, currentDate],
-          (err, results) => {
-            if (err) {
-              console.error("Database error:", err);
-              return res.status(500).send("Database error");
-            }
-
-            if (results.length === 0) {
-              return res.render("error", {
-                errorMsg: "No valid sports equipment request found for your account. Please use the regular issue portal.",
-                user: req.user?.name || "Guest"
-              });
-            }
-
-            // Transform results to match the frontend's expected format
-            const equipment = results.map(item => ({
-              equipment: item.equipment,
-              outNum: item.quantity,
-              outTime: item.approvedOn || new Date().toISOString()
-            }));
-
-            // Render the team issue page
-            res.render("team_issue", {
-              student: req.session.student,
-              equipment: equipment,
-              activePage: "issue",
-              user: req.user?.name || "Guest"
-            });
-          }
-        );
-      }
-    );
-  });
-});
-
-// Regular issue endpoint - GET
 app.get("/issue", (req, res) => {
-  // Calculate actual available equipment by checking pending logs
-  db.query(
-    `SELECT 
-      e.equipment,
-      e.inUseQuantity,
-      COALESCE(COUNT(l.logID), 0) as pendingCount,
-      (e.inUseQuantity - COALESCE(COUNT(l.logID), 0)) as available
-    FROM Equipment e
-    LEFT JOIN Logs l ON e.equipment = l.equipmentBorrowed AND l.pending = TRUE
-    GROUP BY e.equipment, e.inUseQuantity`,
-    (err, results) => {
-      if (err) {
-        console.error("Error calculating equipment availability:", err);
-        return res.status(500).send("Error calculating equipment");
-      }
-
-      // Transform results into a more usable format
-      const availableItems = {};
-      results.forEach(row => {
-        availableItems[row.equipment] = row.available;
-      });
-
-      res.render("issue", {
-        student: req.session.student,
-        availableItems: availableItems,
-        activePage: "issue",
-        user: req.user?.name || "Guest"
-      });
+  calculateAvailableEquipment((err, totalItems) => {
+    if (err) {
+      return res.status(500).send("Error calculating equipment");
     }
-  );
+
+    res.render("issue", {
+      student: req.session.student,
+      availableItems: totalItems,
+      activePage: "issue",
+      user: req.user?.name || "Guest",
+    });
+  });
 });
 
-// Regular issue endpoint - POST
 app.post("/issue", (req, res) => {
   const currentTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
   const quantity = req.body.quantity || {};
 
-  // Get list of equipment to issue (where quantity > 0)
-  const equipmentList = Object.keys(quantity).filter(item => Number(quantity[item]) > 0);
+  const equipmentList = Object.keys(quantity).filter(
+    (item) => Number(quantity[item]) > 0
+  );
 
   if (equipmentList.length === 0) {
     return res.redirect("/landing");
@@ -442,197 +306,66 @@ app.post("/issue", (req, res) => {
 
       const studentEmail = emailResults[0].studentEmail;
 
-      // Double-check availability before proceeding (race condition protection)
-      const placeholders = equipmentList.map(() => '?').join(',');
+      let completed = 0;
+      let hasError = false;
+      const issuedEquipment = [];
 
-      db.query(
-        `SELECT 
-          e.equipment,
-          e.inUseQuantity,
-          COALESCE(COUNT(l.logID), 0) as pendingCount,
-          (e.inUseQuantity - COALESCE(COUNT(l.logID), 0)) as available
-        FROM Equipment e
-        LEFT JOIN Logs l ON e.equipment = l.equipmentBorrowed AND l.pending = TRUE
-        WHERE e.equipment IN (${placeholders})
-        GROUP BY e.equipment, e.inUseQuantity`,
-        equipmentList,
-        (availErr, availResults) => {
-          if (availErr) {
-            console.error("Error checking availability:", availErr);
-            return res.status(500).send("Database error");
-          }
+      equipmentList.forEach((item) => {
+        const qtyToIssue = Number(quantity[item]);
 
-          // Check if requested quantities are available
-          const availabilityMap = {};
-          availResults.forEach(row => {
-            availabilityMap[row.equipment] = row.available;
-          });
+        const dueDate = moment()
+          .tz("Asia/Kolkata")
+          .add(7, "days")
+          .format("YYYY-MM-DD HH:mm:ss");
 
-          for (let item of equipmentList) {
-            const requested = Number(quantity[item]);
-            const available = availabilityMap[item] || 0;
-
-            if (requested > available) {
-              return res.status(400).send(
-                `Not enough ${item} available. Requested: ${requested}, Available: ${available}`
-              );
-            }
-          }
-
-          // Proceed with issuing equipment
-          let completed = 0;
-          let hasError = false;
-          const issuedEquipment = [];
-
-          equipmentList.forEach((item) => {
-            const qtyToIssue = Number(quantity[item]);
-
-            // Calculate due date (e.g., 7 days from now)
-            const dueDate = moment().tz("Asia/Kolkata").add(7, 'days').format("YYYY-MM-DD HH:mm:ss");
-
-            // Insert one row per unit of equipment (repeat for quantity)
-            for (let i = 0; i < qtyToIssue; i++) {
-              db.query(
-                `INSERT INTO Logs (
-                  timestamp, 
-                  equipmentBorrowed, 
-                  studentID, 
-                  studentEmail, 
-                  studentName, 
-                  dueOn, 
-                  pending, 
-                  returned
-                ) VALUES (?, ?, ?, ?, ?, ?, TRUE, FALSE)`,
-                [
-                  currentTime,
-                  item,
-                  req.session.student.AshokaId,
-                  studentEmail,
-                  req.session.student.name,
-                  dueDate
-                ],
-                (insertErr) => {
-                  if (insertErr) {
-                    hasError = true;
-                    console.error("Error issuing equipment:", insertErr);
-                  }
-
-                  completed++;
-
-                  // Check if all insertions are complete
-                  const totalInsertions = equipmentList.reduce(
-                    (sum, eq) => sum + Number(quantity[eq]),
-                    0
-                  );
-
-                  if (completed === totalInsertions) {
-                    if (hasError) {
-                      return res.status(500).send("Database error");
-                    }
-
-                    // Build issued equipment list (grouped by equipment type)
-                    equipmentList.forEach((eq) => {
-                      issuedEquipment.push({
-                        equipment: eq,
-                        outNum: Number(quantity[eq])
-                      });
-                    });
-
-                    // Render success page with equipment details
-                    res.render("success", {
-                      studentName: req.session.student.name,
-                      equipment: issuedEquipment,
-                      user: req.user?.name || "Guest",
-                      mode: "issued"
-                    });
-                  }
-                }
-              );
-            }
-          });
-        }
-      );
-    }
-  );
-});
-
-app.post("/issue_team_equipment", (req, res) => {
-  const selectedEquipments = req.body.equipments;
-  const studentName = req.session.student.name;
-  const currentDate = new Date().toISOString().split('T')[0];
-
-  if (!selectedEquipments || selectedEquipments.length === 0) {
-    return res.json({ success: false, error: "No equipment selected" });
-  }
-
-  // get the email by querying the Students table on AshokaId
-  db.query(
-    "SELECT studentEmail FROM Students WHERE studentID = ?",
-    [req.session.student.AshokaId],
-    (emailErr, emailResults) => {
-      if (emailErr || emailResults.length === 0) {
-        console.error("Error fetching student email:", emailErr);
-        return res.status(500).send("Could not find student email");
-      }
-
-      const studentEmail = emailResults[0].studentEmail;
-
-      // Create placeholders for the IN clause
-      const placeholders = selectedEquipments.map(() => '?').join(',');
-
-      console.log("Querying issue with the following info: ", studentEmail, studentName, selectedEquipments, currentDate);
-
-      // First, get the equipment details before updating
-      db.query(
-        `SELECT equipment, quantity FROM SportsRequests 
-         WHERE studentEmail = ? 
-         AND studentName = ? 
-         AND equipment IN (${placeholders})
-         AND startDate <= ? 
-         AND endDate >= ? 
-         AND (issued IS NULL OR issued = FALSE)`,
-        [studentEmail, studentName, ...selectedEquipments, currentDate, currentDate],
-        (err, equipmentResults) => {
-          if (err) {
-            console.error("Database error:", err);
-            return res.json({ success: false, error: "Database error" });
-          }
-
-          if (equipmentResults.length === 0) {
-            return res.json({
-              success: false,
-              error: "No valid requests found to issue"
-            });
-          }
-
-          // Store equipment in session for success page
-          req.session.issuedEquipment = equipmentResults.map(item => ({
-            equipment: item.equipment,
-            outNum: item.quantity
-          }));
-
-          // Update issued status for selected equipment
+        // Insert one row per issued quantity
+        for (let i = 0; i < qtyToIssue; i++) {
           db.query(
-            `UPDATE SportsRequests 
-             SET issued = TRUE 
-             WHERE studentEmail = ? 
-             AND studentName = ? 
-             AND equipment IN (${placeholders})
-             AND startDate <= ? 
-             AND endDate >= ? 
-             AND (issued IS NULL OR issued = FALSE)`,
-            [studentEmail, studentName, ...selectedEquipments, currentDate, currentDate],
-            (err, results) => {
-              if (err) {
-                console.error("Database error:", err);
-                return res.json({ success: false, error: "Database error" });
+            `INSERT INTO Logs (
+        timestamp, 
+        equipmentBorrowed, 
+        studentID, 
+        studentEmail, 
+        studentName, 
+        dueOn, 
+        pending, 
+        returned
+      ) VALUES (?, ?, ?, ?, ?, ?, TRUE, FALSE)`,
+            [
+              currentTime,
+              item,
+              req.session.student.studentID,
+              studentEmail,
+              req.session.student.studentName,
+              dueDate,
+            ],
+            (insertErr) => {
+              if (insertErr) {
+                hasError = true;
+                console.error("Error issuing equipment:", insertErr);
+                if (!res.headersSent)
+                  return res.status(500).send("Database error");
               }
-
-              res.json({ success: true });
             }
           );
         }
-      );
+
+        // Only push one summary entry for display
+        issuedEquipment.push({
+          equipment: item,
+          outNum: qtyToIssue,
+        });
+
+        completed++;
+
+        if (completed === equipmentList.length && !hasError) {
+          res.render("success", {
+            studentName: req.session.student.studentName,
+            equipment: issuedEquipment,
+            user: req.user?.name || "Guest",
+          });
+        }
+      });
     }
   );
 });
@@ -762,9 +495,10 @@ app.post("/returnMany", (req, res) => {
   const returnedItems = [];
   let completed = 0;
   let hasError = false;
-  const returnedEquipment = [];
 
-  equipments.forEach((equipment) => {
+  returnedLogIDs.forEach((logID) => {
+    const isDamaged = damagedLogIDs.includes(String(logID));
+
     db.query(
       `
       UPDATE Logs
@@ -797,41 +531,48 @@ app.post("/returnMany", (req, res) => {
               msg: "Some items could not be returned.",
               user: req.user?.name || "Guest",
             });
-          return;
-        }
-        const ashokaId = req.body.qrString?.trim();
-
-        const row = rows[0];
-
-        // Track returned equipment
-        returnedEquipment.push({
-          equipment: row.equipmentBorrowed,
-          outNum: row.quantityBorrowed
-        });
-
-        db.query(
-          `UPDATE Logs 
-           SET pending = FALSE, 
-               returned = TRUE, 
-               returnedTimestamp = ?,
-               returnedByID = ?,
-               returnedByEmail = ?
-           WHERE logID = ?`,
-          [returnTime, ashokaId, ashokaId, row.logID],
-          (updateErr) => {
-            if (updateErr) {
-              console.error("DB update error:", updateErr);
-              hasError = true;
-            }
-            completed++;
-            if (completed === equipments.length) {
-              // Store in session and render success page
-              req.session.returnedEquipment = returnedEquipment;
-              // make a get request to /success
-              return res.json({ success: !hasError });
-            }
           }
-        );
+
+          // Group results by equipment name
+          db.query(
+            `SELECT logID, equipmentBorrowed AS equipment
+   FROM Logs
+   WHERE logID IN (${returnedLogIDs.map(() => "?").join(",")})`,
+            returnedLogIDs,
+            (err, rows) => {
+              if (err) {
+                console.error("Grouping error:", err);
+                return res.render("error", {
+                  msg: "Error preparing return summary.",
+                  user: req.user?.name || "Guest",
+                });
+              }
+
+              // Build grouped list
+              const grouped = {};
+              rows.forEach((r) => {
+                if (!grouped[r.equipment]) {
+                  grouped[r.equipment] = {
+                    equipment: r.equipment,
+                    quantity: 0,
+                    damaged: 0,
+                  };
+                }
+                grouped[r.equipment].quantity++;
+
+                if (damagedLogIDs.includes(String(r.logID))) {
+                  grouped[r.equipment].damaged++;
+                }
+              });
+
+              return res.render("return_success", {
+                studentName: req.session.student.studentName,
+                equipment: Object.values(grouped),
+                user: req.user?.name || "Guest",
+              });
+            }
+          );
+        }
       }
     );
   });
@@ -1020,29 +761,70 @@ app.get("/admin", (req, res) => {
       inUseQuantity: row.inUseQuantity,
     }));
 
-    console.log("Equipment Data:", equipmentData);
+    // Fetch Offence List
+    db.query(
+      `SELECT studentID, studentName, studentEmail, borrowedNotOutstanding,
+              borrowedOutstanding, offences
+       FROM Students WHERE offences > 0`,
+      (err2, offenceRows) => {
+        if (err2) return res.status(500).send("Database error");
 
-    res.render('admin', {
-      activePage: 'admin',
-      user: req.user?.name || "Guest",
-      equipment: equipmentData
-    });
+        const offenceList = offenceRows.map((row) => ({
+          studentID: row.studentID,
+          studentName: row.studentName,
+          studentEmail: row.studentEmail,
+          borrowedNotOutstanding: row.borrowedNotOutstanding,
+          borrowedOutstanding: row.borrowedOutstanding,
+          offences: row.offences,
+        }));
+
+        // Fetch Damaged Equipment
+        db.query(
+          `SELECT 
+              equipmentBorrowed AS equipment,
+              studentID,
+              studentName,
+              studentEmail,
+              timestamp AS issuedOn,
+              returnedTimestamp AS returnedOn
+           FROM Logs
+           WHERE damaged = 'Yes'`,
+          (err3, damagedRows) => {
+            if (err3) return res.status(500).send("Database error");
+
+            const damagedEquipmentList = damagedRows.map((row) => ({
+              equipment: row.equipment,
+              studentID: row.studentID,
+              studentName: row.studentName,
+              studentEmail: row.studentEmail,
+              issuedOn: moment(row.issuedOn)
+                .tz("Asia/Kolkata")
+                .format("DD-MM-YYYY HH:mm"),
+              returnedOn: row.returnedOn
+                ? moment(row.returnedOn)
+                    .tz("Asia/Kolkata")
+                    .format("DD-MM-YYYY HH:mm")
+                : "Not Returned",
+            }));
+
+            res.render("admin", {
+              activePage: "admin",
+              user: req.user?.name || "Guest",
+              equipment: equipmentData,
+              offenceList,
+              damagedEquipmentList,
+            });
+          }
+        );
+      }
+    );
   });
 });
 
-app.get('/statistics', (req, res) => {
-  res.render('dashboard', {
-    activePage: 'statistics',
-    user: req.user?.name || "Guest"
-  });
-});
-
-app.post('/success', (req, res) => {
-  res.render('success', {
+app.get("/statistics", (req, res) => {
+  res.render("dashboard", {
+    activePage: "statistics",
     user: req.user?.name || "Guest",
-    studentName: req.body.name || "Unknown",
-    mode: req.body.mode || "processed",
-    equipment: req.body.issuedEquipment || []
   });
 });
 
