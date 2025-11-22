@@ -10,6 +10,7 @@
       href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
       rel="stylesheet"
     />
+
     <link rel="stylesheet" href="/style/landing.css" />
     <link rel="stylesheet" href="/style/return-page.css" />
     <link rel="stylesheet" href="/style/global.css" />
@@ -53,14 +54,14 @@
     <div class="box">
       <div class="up">
         <h1 class="details">
-          <p><%= student.name %></p>
-          <p><%= student.AshokaId %></p>
+          <p><%= student.studentName %></p>
+          <p><%= student.studentID %></p>
         </h1>
         <h1>Pending Equipment Borrowed</h1>
         <h1 class="fake">H</h1>
       </div>
 
-      <% if (equipment.length===0) { %>
+      <% if (equipment.length === 0) { %>
       <p class="noPendingEquipment">No pending equipment</p>
       <% } else { %>
 
@@ -68,10 +69,10 @@
         <thead>
           <tr>
             <th>Equipment</th>
-
             <th>Checkout Time</th>
             <th>Damaged</th>
-            <!-- SELECT ALL CHECKBOX ADDED HERE -->
+
+            <!-- SELECT ALL CHECKBOX -->
             <th class="return-column checkbox-col">
               <div class="head-return">
                 <span>Return All</span>
@@ -96,7 +97,6 @@
                 <input
                   class="damaged-checkbox"
                   type="checkbox"
-                  data-eq="<%= item.equipment %>"
                   value="<%= item.logID %>"
                 />
                 <span class="checkmark"></span>
@@ -109,7 +109,6 @@
                 <input
                   class="equipment-checkbox"
                   type="checkbox"
-                  data-eq="<%= item.equipment %>"
                   value="<%= item.logID %>"
                 />
                 <span class="checkmark"></span>
@@ -119,28 +118,26 @@
           <% }); %>
         </tbody>
       </table>
-
       <br />
       <% } %>
 
       <div class="bottom">
-        <% if (equipment.length !=0) { %>
+        <% if (equipment.length != 0) { %>
         <div class="button-group">
           <button id="returnAllBtn">Return All</button>
           <button id="returnSelectedBtn">Return Selected</button>
         </div>
-        <% }%>
+        <% } %>
       </div>
     </div>
 
     <script>
-      // POST Return Form Builder
+      // Submit Form for POST Returns
       function submitReturnForm(selectedLogIDs) {
         const form = document.createElement("form");
         form.method = "POST";
         form.action = "/returnMany";
 
-        // RETURNED logIDs
         selectedLogIDs.forEach((id) => {
           const input = document.createElement("input");
           input.type = "hidden";
@@ -149,7 +146,6 @@
           form.appendChild(input);
         });
 
-        // DAMAGED logIDs
         const damagedIDs = Array.from(
           document.querySelectorAll(".damaged-checkbox:checked")
         ).map((cb) => cb.value);
@@ -166,57 +162,46 @@
         form.submit();
       }
 
-      // Return Selected
       document
         .getElementById("returnSelectedBtn")
         ?.addEventListener("click", () => {
           const selected = Array.from(
             document.querySelectorAll(".equipment-checkbox:checked")
-          )
-            .map((cb) => cb.value)
-            .filter((v) => v.trim() !== "");
+          ).map((cb) => cb.value);
 
-          if (selected.length === 0) {
-            alert("Please select at least one item to return.");
-            return;
-          }
-
+          if (!selected.length)
+            return alert("Select at least one item to return");
           submitReturnForm(selected);
         });
 
-      // Return All
       document.getElementById("returnAllBtn")?.addEventListener("click", () => {
         if (!confirm("Are you sure you want to return all equipment?")) return;
 
-        const all = Array.from(document.querySelectorAll(".equipment-checkbox"))
-          .map((cb) => cb.value)
-          .filter((v) => v.trim() !== "");
+        const all = Array.from(
+          document.querySelectorAll(".equipment-checkbox")
+        ).map((cb) => cb.value);
 
         submitReturnForm(all);
       });
 
-      // -------------------------
-      // SELECT ALL CHECKBOX LOGIC
-      // -------------------------
+      // SELECT ALL Checkbox Logic
       const selectAllBox = document.getElementById("selectAll");
       const rowCheckboxes = document.querySelectorAll(".equipment-checkbox");
 
       if (selectAllBox) {
-        // When "Select All" changes -> toggle all row checkboxes
         selectAllBox.addEventListener("change", () => {
           const checked = selectAllBox.checked;
           rowCheckboxes.forEach((cb) => (cb.checked = checked));
         });
 
-        // When any row checkbox changes -> sync Select All box
-        rowCheckboxes.forEach((cb) => {
+        rowCheckboxes.forEach((cb) =>
           cb.addEventListener("change", () => {
-            const allChecked = Array.from(rowCheckboxes).every(
+            selectAllBox.checked = Array.from(rowCheckboxes).every(
               (cb2) => cb2.checked
             );
-            selectAllBox.checked = allChecked;
-          });
-        });
+          })
+        );
+      }
     </script>
   </body>
 </html>
