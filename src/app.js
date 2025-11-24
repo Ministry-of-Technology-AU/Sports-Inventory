@@ -48,6 +48,109 @@ app.use(express.urlencoded({ extended: true }));
 
 const sessionStore = new MySQLStoreSession(sessionStoreOptions, pool);
 
+// ========================================================
+// LOGGING SETUP
+// ========================================================
+
+const LOGS_DIR = path.join(__dirname, "../logs");
+if (!fs.existsSync(LOGS_DIR)) fs.mkdirSync(LOGS_DIR, { recursive: true });
+const LOG_FILE = path.join(LOGS_DIR, "app-log.txt");
+
+function logToFile(msg) {
+  const ts = new Date().toISOString();
+  fs.appendFileSync(LOG_FILE, `[${ts}] ${msg}\n`);
+  console.log(msg);
+}
+
+// ========================================================
+// EMAIL SETUP (NODEMAILER)
+// ========================================================
+
+// Create nodemailer transporter
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
+// Load email templates
+const BORROW_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/borrow.html"), "utf-8");
+const RETURN_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/return.html"), "utf-8");
+
+/**
+ * Send borrow confirmation email
+ * @param {string} studentEmail - Student's email address
+ * @param {string} studentName - Student's name
+ * @param {object} equipmentCounts - Object mapping equipment name to quantity
+ */
+async function sendBorrowEmail(studentEmail, studentName, equipmentCounts) {
+  try {
+    // Format equipment list (e.g., "2x Cricket Bat, 1x Basketball")
+    const equipmentList = Object.entries(equipmentCounts)
+      .map(([equipment, qty]) => `${qty}x ${equipment}`)
+      .join(", ");
+
+    // Replace placeholders in template
+    const emailHtml = BORROW_TEMPLATE
+      .replace(/{{name}}/g, studentName)
+      .replace(/{{borrowedEquipment}}/g, equipmentList);
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: studentEmail,
+      subject: "Sports Equipment Borrowed - Confirmation",
+      html: emailHtml
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    logToFile(`📧 Borrow email sent to ${studentEmail} - MessageID: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    logToFile(`❌ Failed to send borrow email to ${studentEmail}: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Send return confirmation email
+ * @param {string} studentEmail - Student's email address
+ * @param {string} studentName - Student's name
+ * @param {object} equipmentCounts - Object mapping equipment name to quantity
+ */
+async function sendReturnEmail(studentEmail, studentName, equipmentCounts) {
+  try {
+    // Format equipment list
+    const equipmentList = Object.entries(equipmentCounts)
+      .map(([equipment, qty]) => `${qty}x ${equipment}`)
+      .join(", ");
+
+    // Replace placeholders in template
+    const emailHtml = RETURN_TEMPLATE
+      .replace(/{{name}}/g, studentName)
+      .replace(/{{returnedEquipment}}/g, equipmentList);
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: studentEmail,
+      subject: "Sports Equipment Returned - Confirmation",
+      html: emailHtml
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    logToFile(`📧 Return email sent to ${studentEmail} - MessageID: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    logToFile(`❌ Failed to send return email to ${studentEmail}: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+// ========================================================
+// END EMAIL SETUP
+// ========================================================
+
 const publicPaths = [
   '/auth/google',
   '/auth/google/callback',
@@ -492,6 +595,19 @@ app.post("/issue", (req, res) => {
                       });
                     });
 
+                    // Prepare equipment counts for email
+                    const equipmentCounts = {};
+                    equipmentList.forEach((eq) => {
+                      equipmentCounts[eq] = Number(quantity[eq]);
+                    });
+
+                    // Send borrow confirmation email (non-blocking)
+                    sendBorrowEmail(studentEmail, req.session.student.name, equipmentCounts)
+                      .catch(err => {
+                        console.error("Email send error:", err);
+                        // Don't block the response on email failure
+                      });
+
                     // Render success page with equipment details
                     res.render("success", {
                       studentName: req.session.student.name,
@@ -696,7 +812,7 @@ app.post("/returnMany", (req, res) => {
 
   let completed = 0;
   let hasError = false;
-  const returnedEquipment = [];
+  const returnedItems = {};
 
   equipments.forEach((equipment) => {
     db.query(
@@ -710,22 +826,22 @@ app.post("/returnMany", (req, res) => {
           console.error("DB fetch error:", err);
           hasError = true;
           completed++;
-          if (completed === equipments.length)
+          if (completed === equipments.length) {
             return res.json({
               success: !hasError,
               error: hasError ? "Some returns failed" : null,
             });
+          }
           return;
         }
-        const ashokaId = req.body.qrString?.trim();
 
         const row = rows[0];
-
-        // Track returned equipment
-        returnedEquipment.push({
-          equipment: row.equipmentBorrowed,
-          outNum: row.quantityBorrowed
-        });
+        
+        // Set returnedByID and returnedByEmail to NULL to avoid FK constraint violations
+        // FK constraints require these values to exist in Students table
+        // The OAuth admin email (req.user?.email) won't be in Students table
+        const returnedByID = null;
+        const returnedByEmail = null;
 
         db.query(
           `UPDATE Logs 
@@ -735,18 +851,45 @@ app.post("/returnMany", (req, res) => {
                returnedByID = ?,
                returnedByEmail = ?
            WHERE logID = ?`,
-          [returnTime, ashokaId, ashokaId, row.logID],
+          [returnTime, returnedByID, returnedByEmail, row.logID],
           (updateErr) => {
             if (updateErr) {
-              console.error("DB update error:", updateErr);
+              console.error("DB update error for equipment:", equipment, "logID:", row.logID);
+              console.error("Error details:", updateErr);
               hasError = true;
+            } else {
+              console.log("Successfully returned:", equipment, "logID:", row.logID);
+              // Track returned items (count duplicates)
+              returnedItems[equipment] = (returnedItems[equipment] || 0) + 1;
             }
+
             completed++;
             if (completed === equipments.length) {
-              // Store in session and render success page
-              req.session.returnedEquipment = returnedEquipment;
-              // make a get request to /success
-              return res.json({ success: !hasError });
+              // All returns processed - send email if any succeeded
+              if (!hasError && Object.keys(returnedItems).length > 0) {
+                // Get student email from MySQL
+                db.query(
+                  "SELECT studentEmail, studentName FROM Students WHERE studentID = ?",
+                  [studentId],
+                  (emailErr, emailResults) => {
+                    if (!emailErr && emailResults.length > 0) {
+                      const { studentEmail, studentName } = emailResults[0];
+                      // Send return confirmation email (non-blocking)
+                      sendReturnEmail(studentEmail, studentName, returnedItems)
+                        .catch(err => {
+                          console.error("Return email send error:", err);
+                        });
+                    } else {
+                      console.error("Could not fetch student email for return notification");
+                    }
+                  }
+                );
+              }
+
+              return res.json({
+                success: !hasError,
+                error: hasError ? "Some returns failed - check server logs" : null,
+              });
             }
           }
         );
