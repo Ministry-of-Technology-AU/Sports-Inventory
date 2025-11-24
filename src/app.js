@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 import passport from './passport-auth.js';
 import MySQLStore from 'express-mysql-session';
 import nodemailer from "nodemailer";
+import cron from "node-cron";
 
 console.log("Running");
 const app = express();
@@ -78,6 +79,7 @@ const transporter = nodemailer.createTransport({
 // Load email templates
 const BORROW_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/borrow.html"), "utf-8");
 const RETURN_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/return.html"), "utf-8");
+const OVERDUE_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/overdue.html"), "utf-8");
 
 /**
  * Send borrow confirmation email
@@ -147,8 +149,150 @@ async function sendReturnEmail(studentEmail, studentName, equipmentCounts) {
   }
 }
 
+/**
+ * Send overdue equipment reminder email
+ * @param {string} studentEmail - Student's email address
+ * @param {string} studentName - Student's name
+ * @param {object} equipmentCounts - Object mapping equipment name to quantity
+ */
+async function sendOverdueEmail(studentEmail, studentName, equipmentCounts) {
+  try {
+    // Format equipment list with each item on a new line
+    const equipmentList = Object.entries(equipmentCounts)
+      .map(([equipment, qty]) => `${equipment} - ${qty}`)
+      .join("<br>");
+
+    // Replace placeholders in template
+    const emailHtml = OVERDUE_TEMPLATE
+      .replace(/{{name}}/g, studentName)
+      .replace(/{{pendingEquipment}}/g, equipmentList);
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: studentEmail,
+      subject: "⚠️ Sports Equipment Overdue - Return Required",
+      html: emailHtml
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    logToFile(`📧 Overdue email sent to ${studentEmail} - MessageID: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    logToFile(`❌ Failed to send overdue email to ${studentEmail}: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
 // ========================================================
-// END EMAIL SETUP
+// OVERDUE TRACKING & CRON JOB
+// ========================================================
+
+// Track when we last sent overdue emails to students (one per day limit)
+const overdueEmailTracker = new Map(); // studentID -> lastEmailDate (YYYY-MM-DD)
+
+/**
+ * Check for overdue items and send reminder emails
+ * Items are overdue if dueOn date has passed (based on dueOn field from schema)
+ */
+async function checkAndNotifyOverdue() {
+  try {
+    logToFile("🔄 Running overdue check...");
+    
+    const now = moment().tz("Asia/Kolkata");
+    const currentTime = now.format("YYYY-MM-DD HH:mm:ss");
+    const today = now.format("YYYY-MM-DD");
+
+    // Find all logs where equipment is still pending and dueOn date has passed
+    // Using the dueOn field from the schema which is set during issue
+    const overdueQuery = `
+      SELECT 
+        l.studentID,
+        l.studentName,
+        l.studentEmail,
+        l.equipmentBorrowed,
+        COUNT(*) as quantity,
+        MIN(l.timestamp) as oldestBorrow,
+        MIN(l.dueOn) as earliestDue
+      FROM Logs l
+      WHERE l.pending = TRUE 
+        AND l.returned = FALSE
+        AND l.dueOn < ?
+      GROUP BY l.studentID, l.studentName, l.studentEmail, l.equipmentBorrowed
+    `;
+
+    const overdueItems = await db.query(overdueQuery, [currentTime]);
+
+    if (overdueItems.length === 0) {
+      logToFile("   ✅ No overdue items found");
+      return;
+    }
+
+    // Group by student
+    const studentOverdueMap = new Map();
+    
+    overdueItems.forEach(item => {
+      if (!studentOverdueMap.has(item.studentID)) {
+        studentOverdueMap.set(item.studentID, {
+          studentEmail: item.studentEmail,
+          studentName: item.studentName,
+          equipment: {}
+        });
+      }
+      
+      const student = studentOverdueMap.get(item.studentID);
+      student.equipment[item.equipmentBorrowed] = item.quantity;
+    });
+
+    logToFile(`   📊 Found ${studentOverdueMap.size} students with overdue equipment`);
+
+    // Send emails (one per student per day)
+    for (const [studentID, data] of studentOverdueMap.entries()) {
+      const lastEmailDate = overdueEmailTracker.get(studentID);
+      
+      // Check if we already sent an email today
+      if (lastEmailDate === today) {
+        logToFile(`   ⏭️  Skipping ${data.studentName} - already emailed today`);
+        continue;
+      }
+
+      // Send overdue email
+      const result = await sendOverdueEmail(
+        data.studentEmail,
+        data.studentName,
+        data.equipment
+      );
+
+      if (result.success) {
+        // Mark as emailed today
+        overdueEmailTracker.set(studentID, today);
+        logToFile(`   ✅ Sent overdue notification to ${data.studentName}`);
+      }
+    }
+
+    logToFile("🏁 Overdue check complete");
+  } catch (error) {
+    logToFile(`❌ Error in overdue check: ${error.message}`);
+    console.error("Overdue check error:", error);
+  }
+}
+
+// Schedule cron job to run every 12 hours (at 8 AM and 8 PM)
+// Format: "minute hour * * *" where * means every day
+cron.schedule('0 8,20 * * *', () => {
+  logToFile("⏰ Cron job triggered: Starting overdue check");
+  checkAndNotifyOverdue();
+}, {
+  timezone: "Asia/Kolkata"
+});
+
+// Run once on startup (after a short delay to let DB initialize)
+setTimeout(() => {
+  logToFile("🚀 Running initial overdue check on startup");
+  checkAndNotifyOverdue();
+}, 5000);
+
+// ========================================================
+// END OVERDUE TRACKING
 // ========================================================
 
 const publicPaths = [
