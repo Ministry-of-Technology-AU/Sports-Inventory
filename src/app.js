@@ -442,7 +442,7 @@ app.post("/issue_login_sports", (req, res) => {
   // If yes, redirected to endpoint /issue_login 
   // Else, render error page with message "not sports team authorised"
   db.query(
-    "SELECT sportsTeamAuthorised FROM Students WHERE AshokaId = ?",
+    "SELECT sportsTeamAuthorised FROM Students WHERE studentID = ?",
     [ashokaId],
     (err, results) => {
       if (err) {
