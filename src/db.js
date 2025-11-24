@@ -11,7 +11,7 @@ const dbConfig = {
   connectionLimit: parseInt(process.env.DB_CONN_LIMIT || '10'),
   queueLimit: 0,
   // Short, reasonable timeout for local development
-  connectTimeout: parseInt(process.env.DB_CONNECT_TIMEOUT || '10000'),
+  // connectTimeout: parseInt(process.env.DB_CONNECT_TIMEOUT || '10000'),
   // Keep-alive improves stability for long-running dev servers
   enableKeepAlive: true,
   keepAliveInitialDelay: 0,
