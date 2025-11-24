@@ -87,10 +87,10 @@ const RETURN_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/retur
  */
 async function sendBorrowEmail(studentEmail, studentName, equipmentCounts) {
   try {
-    // Format equipment list (e.g., "2x Cricket Bat, 1x Basketball")
+    // Format equipment list with each item on a new line (e.g., "Cricket Bat - 2<br>Basketball - 1")
     const equipmentList = Object.entries(equipmentCounts)
-      .map(([equipment, qty]) => `${qty}x ${equipment}`)
-      .join(", ");
+      .map(([equipment, qty]) => `${equipment} - ${qty}`)
+      .join("<br>");
 
     // Replace placeholders in template
     const emailHtml = BORROW_TEMPLATE
@@ -121,10 +121,10 @@ async function sendBorrowEmail(studentEmail, studentName, equipmentCounts) {
  */
 async function sendReturnEmail(studentEmail, studentName, equipmentCounts) {
   try {
-    // Format equipment list
+    // Format equipment list with each item on a new line (e.g., "Cricket Bat - 2<br>Football - 1")
     const equipmentList = Object.entries(equipmentCounts)
-      .map(([equipment, qty]) => `${qty}x ${equipment}`)
-      .join(", ");
+      .map(([equipment, qty]) => `${equipment} - ${qty}`)
+      .join("<br>");
 
     // Replace placeholders in template
     const emailHtml = RETURN_TEMPLATE
