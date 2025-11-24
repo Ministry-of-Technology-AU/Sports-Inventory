@@ -1,5 +1,4 @@
 import express from "express";
-import mysql from "mysql2";
 import moment from "moment-timezone";
 import path from "path";
 import fs from "fs";
@@ -9,6 +8,7 @@ import session from "express-session";
 import { fileURLToPath } from "url";
 import passport from './passport-auth.js';
 import MySQLStore from 'express-mysql-session';
+import nodemailer from "nodemailer";
 
 console.log("Running");
 const app = express();
@@ -23,77 +23,12 @@ app.use("/images", express.static(path.join(__dirname, "../images")));
 
 const port = process.env.PORT || 3000;
 
-const dbConfig = {
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port: parseInt(process.env.DB_PORT) || 3306,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  connectTimeout: 30000, // 30 seconds for Railway
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 0,
-  // Railway MySQL 9.4.0 uses self-signed SSL certificates
-  // Must set rejectUnauthorized: false to accept them
-  ssl: process.env.DB_HOST?.includes('railway') || process.env.DB_HOST?.includes('rlwy.net')
-    ? {
-      rejectUnauthorized: false,  // Accept self-signed certs
-      minVersion: 'TLSv1.2',      // MySQL 9.4.0 requirement
-      maxVersion: 'TLSv1.3'       // Support latest TLS
-    }
-    : undefined
-};
-
-console.log("Creating Railway MySQL connection pool...");
-const db = mysql.createPool(dbConfig);
-
-// Test connection on startup with retry logic
-async function testDatabaseConnection(retries = 3, delay = 2000) {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const connection = await new Promise((resolve, reject) => {
-        db.getConnection((err, conn) => {
-          if (err) reject(err);
-          else resolve(conn);
-        });
-      });
-
-      console.log("✅ Connected to Railway MySQL database with connection pool");
-      connection.release();
-      return true;
-    } catch (err) {
-      console.error(`❌ Database connection attempt ${attempt}/${retries} failed:`, err.message);
-
-      if (attempt === retries) {
-        console.error("Connection details:", {
-          host: dbConfig.host,
-          user: dbConfig.user,
-          database: dbConfig.database,
-          port: dbConfig.port,
-          ssl: dbConfig.ssl ? 'enabled' : 'disabled'
-        });
-        console.warn("⚠️ App will continue but database operations may fail");
-        console.warn("💡 Tip: Check if your Railway MySQL service is active and not paused");
-        return false;
-      }
-
-      console.log(`⏳ Retrying in ${delay / 1000} seconds...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      delay *= 2; // Exponential backoff
-    }
-  }
-}
-
-// Start connection test
-testDatabaseConnection();
+import db, { pool } from "./db.js";
 
 app.set("view engine", "ejs");
 
 const MySQLStoreSession = MySQLStore(session);
 const sessionStoreOptions = {
-  ...dbConfig,
   schema: {
     tableName: 'sessions',
     columnNames: {
@@ -111,7 +46,7 @@ const sessionStoreOptions = {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const sessionStore = new MySQLStoreSession(sessionStoreOptions);
+const sessionStore = new MySQLStoreSession(sessionStoreOptions, pool);
 
 const publicPaths = [
   '/auth/google',
