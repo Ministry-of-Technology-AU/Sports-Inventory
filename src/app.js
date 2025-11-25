@@ -1,5 +1,4 @@
 import express from "express";
-import mysql from "mysql2";
 import moment from "moment-timezone";
 import path from "path";
 import fs from "fs";
@@ -9,6 +8,8 @@ import session from "express-session";
 import { fileURLToPath } from "url";
 import passport from './passport-auth.js';
 import MySQLStore from 'express-mysql-session';
+import nodemailer from "nodemailer";
+import cron from "node-cron";
 
 console.log("Running");
 const app = express();
@@ -23,77 +24,12 @@ app.use("/images", express.static(path.join(__dirname, "../images")));
 
 const port = process.env.PORT || 3000;
 
-const dbConfig = {
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port: parseInt(process.env.DB_PORT) || 3306,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  connectTimeout: 30000, // 30 seconds for Railway
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 0,
-  // Railway MySQL 9.4.0 uses self-signed SSL certificates
-  // Must set rejectUnauthorized: false to accept them
-  ssl: process.env.DB_HOST?.includes('railway') || process.env.DB_HOST?.includes('rlwy.net')
-    ? {
-      rejectUnauthorized: false,  // Accept self-signed certs
-      minVersion: 'TLSv1.2',      // MySQL 9.4.0 requirement
-      maxVersion: 'TLSv1.3'       // Support latest TLS
-    }
-    : undefined
-};
-
-console.log("Creating Railway MySQL connection pool...");
-const db = mysql.createPool(dbConfig);
-
-// Test connection on startup with retry logic
-async function testDatabaseConnection(retries = 3, delay = 2000) {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const connection = await new Promise((resolve, reject) => {
-        db.getConnection((err, conn) => {
-          if (err) reject(err);
-          else resolve(conn);
-        });
-      });
-
-      console.log("✅ Connected to Railway MySQL database with connection pool");
-      connection.release();
-      return true;
-    } catch (err) {
-      console.error(`❌ Database connection attempt ${attempt}/${retries} failed:`, err.message);
-
-      if (attempt === retries) {
-        console.error("Connection details:", {
-          host: dbConfig.host,
-          user: dbConfig.user,
-          database: dbConfig.database,
-          port: dbConfig.port,
-          ssl: dbConfig.ssl ? 'enabled' : 'disabled'
-        });
-        console.warn("⚠️ App will continue but database operations may fail");
-        console.warn("💡 Tip: Check if your Railway MySQL service is active and not paused");
-        return false;
-      }
-
-      console.log(`⏳ Retrying in ${delay / 1000} seconds...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      delay *= 2; // Exponential backoff
-    }
-  }
-}
-
-// Start connection test
-testDatabaseConnection();
+import db, { pool } from "./db.js";
 
 app.set("view engine", "ejs");
 
 const MySQLStoreSession = MySQLStore(session);
 const sessionStoreOptions = {
-  ...dbConfig,
   schema: {
     tableName: 'sessions',
     columnNames: {
@@ -111,7 +47,253 @@ const sessionStoreOptions = {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const sessionStore = new MySQLStoreSession(sessionStoreOptions);
+const sessionStore = new MySQLStoreSession(sessionStoreOptions, pool);
+
+// ========================================================
+// LOGGING SETUP
+// ========================================================
+
+const LOGS_DIR = path.join(__dirname, "../logs");
+if (!fs.existsSync(LOGS_DIR)) fs.mkdirSync(LOGS_DIR, { recursive: true });
+const LOG_FILE = path.join(LOGS_DIR, "app-log.txt");
+
+function logToFile(msg) {
+  const ts = new Date().toISOString();
+  fs.appendFileSync(LOG_FILE, `[${ts}] ${msg}\n`);
+  console.log(msg);
+}
+
+// ========================================================
+// EMAIL SETUP (NODEMAILER)
+// ========================================================
+
+// Create nodemailer transporter
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
+// Load email templates
+const BORROW_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/borrow.html"), "utf-8");
+const RETURN_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/return.html"), "utf-8");
+const OVERDUE_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/overdue.html"), "utf-8");
+
+/**
+ * Send borrow confirmation email
+ * @param {string} studentEmail - Student's email address
+ * @param {string} studentName - Student's name
+ * @param {object} equipmentCounts - Object mapping equipment name to quantity
+ */
+async function sendBorrowEmail(studentEmail, studentName, equipmentCounts) {
+  try {
+    // Format equipment list with each item on a new line (e.g., "Cricket Bat - 2<br>Basketball - 1")
+    const equipmentList = Object.entries(equipmentCounts)
+      .map(([equipment, qty]) => `${equipment} - ${qty}`)
+      .join("<br>");
+
+    // Replace placeholders in template
+    const emailHtml = BORROW_TEMPLATE
+      .replace(/{{name}}/g, studentName)
+      .replace(/{{borrowedEquipment}}/g, equipmentList);
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: studentEmail,
+      subject: "Sports Equipment Borrowed - Confirmation",
+      html: emailHtml
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    logToFile(`📧 Borrow email sent to ${studentEmail} - MessageID: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    logToFile(`❌ Failed to send borrow email to ${studentEmail}: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Send return confirmation email
+ * @param {string} studentEmail - Student's email address
+ * @param {string} studentName - Student's name
+ * @param {object} equipmentCounts - Object mapping equipment name to quantity
+ */
+async function sendReturnEmail(studentEmail, studentName, equipmentCounts) {
+  try {
+    // Format equipment list with each item on a new line (e.g., "Cricket Bat - 2<br>Football - 1")
+    const equipmentList = Object.entries(equipmentCounts)
+      .map(([equipment, qty]) => `${equipment} - ${qty}`)
+      .join("<br>");
+
+    // Replace placeholders in template
+    const emailHtml = RETURN_TEMPLATE
+      .replace(/{{name}}/g, studentName)
+      .replace(/{{returnedEquipment}}/g, equipmentList);
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: studentEmail,
+      subject: "Sports Equipment Returned - Confirmation",
+      html: emailHtml
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    logToFile(`📧 Return email sent to ${studentEmail} - MessageID: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    logToFile(`❌ Failed to send return email to ${studentEmail}: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Send overdue equipment reminder email
+ * @param {string} studentEmail - Student's email address
+ * @param {string} studentName - Student's name
+ * @param {object} equipmentCounts - Object mapping equipment name to quantity
+ */
+async function sendOverdueEmail(studentEmail, studentName, equipmentCounts) {
+  try {
+    // Format equipment list with each item on a new line
+    const equipmentList = Object.entries(equipmentCounts)
+      .map(([equipment, qty]) => `${equipment} - ${qty}`)
+      .join("<br>");
+
+    // Replace placeholders in template
+    const emailHtml = OVERDUE_TEMPLATE
+      .replace(/{{name}}/g, studentName)
+      .replace(/{{pendingEquipment}}/g, equipmentList);
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: studentEmail,
+      subject: "⚠️ Sports Equipment Overdue - Return Required",
+      html: emailHtml
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    logToFile(`📧 Overdue email sent to ${studentEmail} - MessageID: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    logToFile(`❌ Failed to send overdue email to ${studentEmail}: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
+// ========================================================
+// OVERDUE TRACKING & CRON JOB
+// ========================================================
+
+// Track when we last sent overdue emails to students (one per day limit)
+const overdueEmailTracker = new Map(); // studentID -> lastEmailDate (YYYY-MM-DD)
+
+/**
+ * Check for overdue items and send reminder emails
+ * Items are overdue if dueOn date has passed (based on dueOn field from schema)
+ */
+async function checkAndNotifyOverdue() {
+  try {
+    logToFile("🔄 Running overdue check...");
+    
+    const now = moment().tz("Asia/Kolkata");
+    const currentTime = now.format("YYYY-MM-DD HH:mm:ss");
+    const today = now.format("YYYY-MM-DD");
+
+    // Find all logs where equipment is still pending and dueOn date has passed
+    // Using the dueOn field from the schema which is set during issue
+    const overdueQuery = `
+      SELECT 
+        l.studentID,
+        l.studentName,
+        l.studentEmail,
+        l.equipmentBorrowed,
+        COUNT(*) as quantity,
+        MIN(l.timestamp) as oldestBorrow,
+        MIN(l.dueOn) as earliestDue
+      FROM Logs l
+      WHERE l.pending = TRUE 
+        AND l.returned = FALSE
+        AND l.dueOn < ?
+      GROUP BY l.studentID, l.studentName, l.studentEmail, l.equipmentBorrowed
+    `;
+
+    const overdueItems = await db.query(overdueQuery, [currentTime]);
+
+    if (overdueItems.length === 0) {
+      logToFile("   ✅ No overdue items found");
+      return;
+    }
+
+    // Group by student
+    const studentOverdueMap = new Map();
+    
+    overdueItems.forEach(item => {
+      if (!studentOverdueMap.has(item.studentID)) {
+        studentOverdueMap.set(item.studentID, {
+          studentEmail: item.studentEmail,
+          studentName: item.studentName,
+          equipment: {}
+        });
+      }
+      
+      const student = studentOverdueMap.get(item.studentID);
+      student.equipment[item.equipmentBorrowed] = item.quantity;
+    });
+
+    logToFile(`   📊 Found ${studentOverdueMap.size} students with overdue equipment`);
+
+    // Send emails (one per student per day)
+    for (const [studentID, data] of studentOverdueMap.entries()) {
+      const lastEmailDate = overdueEmailTracker.get(studentID);
+      
+      // Check if we already sent an email today
+      if (lastEmailDate === today) {
+        logToFile(`   ⏭️  Skipping ${data.studentName} - already emailed today`);
+        continue;
+      }
+
+      // Send overdue email
+      const result = await sendOverdueEmail(
+        data.studentEmail,
+        data.studentName,
+        data.equipment
+      );
+
+      if (result.success) {
+        // Mark as emailed today
+        overdueEmailTracker.set(studentID, today);
+        logToFile(`   ✅ Sent overdue notification to ${data.studentName}`);
+      }
+    }
+
+    logToFile("🏁 Overdue check complete");
+  } catch (error) {
+    logToFile(`❌ Error in overdue check: ${error.message}`);
+    console.error("Overdue check error:", error);
+  }
+}
+
+// Schedule cron job to run every 12 hours (at 8 AM and 8 PM)
+// Format: "minute hour * * *" where * means every day
+cron.schedule('0 8,20 * * *', () => {
+  logToFile("⏰ Cron job triggered: Starting overdue check");
+  checkAndNotifyOverdue();
+}, {
+  timezone: "Asia/Kolkata"
+});
+
+// Run once on startup (after a short delay to let DB initialize)
+setTimeout(() => {
+  logToFile("🚀 Running initial overdue check on startup");
+  checkAndNotifyOverdue();
+}, 5000);
+
+// ========================================================
+// END OVERDUE TRACKING
+// ========================================================
 
 const publicPaths = [
   '/auth/google',
@@ -135,10 +317,38 @@ app.use(passport.session());
 
 // Global authentication middleware
 app.use((req, res, next) => {
+  // Public paths don't need any authentication
   if (publicPaths && publicPaths.includes(req.path) || req.path.startsWith('/auth/')) {
     return next();
   }
-  ensureAuthenticated(req, res, next);
+  
+  // Admin pages require OAuth authentication
+  const adminPaths = ['/admin', '/statistics', '/dashboard'];
+  if (adminPaths.includes(req.path)) {
+    return ensureAuthenticated(req, res, next);
+  }
+  
+  // Student pages (/issue, /landing, etc.) require student session (QR code login)
+  const studentPaths = ['/issue', '/landing', '/team_landing'];
+  if (studentPaths.includes(req.path)) {
+    // Allow if user has student session OR is OAuth authenticated
+    if (req.session.student || req.isAuthenticated()) {
+      return next();
+    }
+    // Redirect to appropriate login page
+    if (req.path === '/issue') {
+      return res.redirect('/issue_login');
+    }
+    return res.redirect('/return_login');
+  }
+  
+  // For POST routes and other paths, allow if either auth method is present
+  if (req.session.student || req.isAuthenticated()) {
+    return next();
+  }
+  
+  // Default: redirect to issue login
+  res.redirect('/issue_login');
 });
 
 function ensureAuthenticated(req, res, next) {
@@ -232,7 +442,7 @@ app.post("/issue_login_sports", (req, res) => {
   // If yes, redirected to endpoint /issue_login 
   // Else, render error page with message "not sports team authorised"
   db.query(
-    "SELECT sportsTeamAuthorised FROM Students WHERE AshokaId = ?",
+    "SELECT sportsTeamAuthorised FROM Students WHERE studentID = ?",
     [ashokaId],
     (err, results) => {
       if (err) {
@@ -529,6 +739,19 @@ app.post("/issue", (req, res) => {
                       });
                     });
 
+                    // Prepare equipment counts for email
+                    const equipmentCounts = {};
+                    equipmentList.forEach((eq) => {
+                      equipmentCounts[eq] = Number(quantity[eq]);
+                    });
+
+                    // Send borrow confirmation email (non-blocking)
+                    sendBorrowEmail(studentEmail, req.session.student.name, equipmentCounts)
+                      .catch(err => {
+                        console.error("Email send error:", err);
+                        // Don't block the response on email failure
+                      });
+
                     // Render success page with equipment details
                     res.render("success", {
                       studentName: req.session.student.name,
@@ -733,7 +956,7 @@ app.post("/returnMany", (req, res) => {
 
   let completed = 0;
   let hasError = false;
-  const returnedEquipment = [];
+  const returnedItems = {};
 
   equipments.forEach((equipment) => {
     db.query(
@@ -747,22 +970,22 @@ app.post("/returnMany", (req, res) => {
           console.error("DB fetch error:", err);
           hasError = true;
           completed++;
-          if (completed === equipments.length)
+          if (completed === equipments.length) {
             return res.json({
               success: !hasError,
               error: hasError ? "Some returns failed" : null,
             });
+          }
           return;
         }
-        const ashokaId = req.body.qrString?.trim();
 
         const row = rows[0];
-
-        // Track returned equipment
-        returnedEquipment.push({
-          equipment: row.equipmentBorrowed,
-          outNum: row.quantityBorrowed
-        });
+        
+        // Set returnedByID and returnedByEmail to NULL to avoid FK constraint violations
+        // FK constraints require these values to exist in Students table
+        // The OAuth admin email (req.user?.email) won't be in Students table
+        const returnedByID = null;
+        const returnedByEmail = null;
 
         db.query(
           `UPDATE Logs 
@@ -772,18 +995,45 @@ app.post("/returnMany", (req, res) => {
                returnedByID = ?,
                returnedByEmail = ?
            WHERE logID = ?`,
-          [returnTime, ashokaId, ashokaId, row.logID],
+          [returnTime, returnedByID, returnedByEmail, row.logID],
           (updateErr) => {
             if (updateErr) {
-              console.error("DB update error:", updateErr);
+              console.error("DB update error for equipment:", equipment, "logID:", row.logID);
+              console.error("Error details:", updateErr);
               hasError = true;
+            } else {
+              console.log("Successfully returned:", equipment, "logID:", row.logID);
+              // Track returned items (count duplicates)
+              returnedItems[equipment] = (returnedItems[equipment] || 0) + 1;
             }
+
             completed++;
             if (completed === equipments.length) {
-              // Store in session and render success page
-              req.session.returnedEquipment = returnedEquipment;
-              // make a get request to /success
-              return res.json({ success: !hasError });
+              // All returns processed - send email if any succeeded
+              if (!hasError && Object.keys(returnedItems).length > 0) {
+                // Get student email from MySQL
+                db.query(
+                  "SELECT studentEmail, studentName FROM Students WHERE studentID = ?",
+                  [studentId],
+                  (emailErr, emailResults) => {
+                    if (!emailErr && emailResults.length > 0) {
+                      const { studentEmail, studentName } = emailResults[0];
+                      // Send return confirmation email (non-blocking)
+                      sendReturnEmail(studentEmail, studentName, returnedItems)
+                        .catch(err => {
+                          console.error("Return email send error:", err);
+                        });
+                    } else {
+                      console.error("Could not fetch student email for return notification");
+                    }
+                  }
+                );
+              }
+
+              return res.json({
+                success: !hasError,
+                error: hasError ? "Some returns failed - check server logs" : null,
+              });
             }
           }
         );
