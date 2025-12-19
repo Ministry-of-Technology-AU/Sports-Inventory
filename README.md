@@ -36,18 +36,21 @@ Install dependencies
 ```bash
   npm install mysql2 nodemailer dotenv node-cron moment-timezone
 ```
-<<<<<<< HEAD
-=======
 and
 ```bash
-  npm i nodemon
+  npm install -g nodemon # or using yarn: yarn global add nodemon
 ```
->>>>>>> parent of acc3ebe (Update README.md)
 
 Start the app
 
 ```bash
-  npm run dev
+  nodemon src/app4.js
+```
+
+or 
+
+```bash
+  npm run dev 
 ```
 
 
@@ -70,5 +73,4 @@ Start the app
 ## Screenshots
 
 ![App Screenshot](https://via.placeholder.com/468x300?text=App+Screenshot+Here)
-
 
