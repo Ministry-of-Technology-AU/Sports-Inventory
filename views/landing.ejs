@@ -1,118 +1,153 @@
 <!DOCTYPE html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Landing Page</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style/landing.css" />
+    <link rel="stylesheet" href="/style/return-page.css" />
+    <link rel="stylesheet" href="/style/global.css" />
+    <style>
+      body {
+        background-color: var(--off-white);
+      }
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Landing Page</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
-    rel="stylesheet" />
-  <link rel="stylesheet" href="/style/landing.css" />
-  <link rel="stylesheet" href="/style/return-page.css" />
-  <link rel="stylesheet" href="/style/global.css" />
-  <style>
-    body {
-      background-color: var(--off-white);
-    }
+      .button-group {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        align-items: center;
+      }
 
-    .button-group {
-      display: flex;
-      gap: 15px;
-      justify-content: center;
-      align-items: center;
-    }
+      #returnAllBtn {
+        background: var(--primary-color);
+        color: var(--text-color-secondary);
+        border: none;
+        padding: 16px 36px;
+        font-size: 18px;
+        font-weight: 600;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
 
-    #returnAllBtn {
-      background: var(--primary-color);
-      color: var(--text-color-secondary);
-      border: none;
-      padding: 16px 36px;
-      font-size: 18px;
-      font-weight: 600;
-      border-radius: 10px;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
+      #returnAllBtn:hover {
+        background: var(--primary-color);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(13, 56, 98, 0.3);
+      }
+    </style>
+  </head>
 
-    #returnAllBtn:hover {
-      background: var(--primary-color);
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(13, 56, 98, 0.3);
-    }
-  </style>
-</head>
-
-<body>
-  <%- include("nav",{ activePage: "landing" , config: "admin" , userName: user }) %>
+  <body>
+    <%- include("nav",{ activePage: "landing" , config: "admin" , userName: user
+    }) %>
     <div class="box">
       <div class="up">
         <h1 class="details">
-          <p>
-            <%= student.name %>
-          </p>
-          <p>
-            <%= student.AshokaId %>
-          </p>
+          <p><%= student.name %></p>
+          <p><%= student.AshokaId %></p>
         </h1>
         <h1>Pending Equipment Borrowed</h1>
         <h1 class="fake">H</h1>
       </div>
 
       <% if (equipment.length===0) { %>
-        <p class="noPendingEquipment">No pending equipment</p>
-        <% } else { %>
-          <table border="1" cellpadding="5">
-            <thead>
-              <tr>
-                <th>Equipment</th>
-                <th>Checkout Time</th>
-                <th>Damaged</th>
-                <th>Return</th>
-              </tr>
-            </thead>
-            <tbody>
-              <% equipment.forEach(function(item) { %>
-                <tr>
-                  <td>
-                    <%= item.equipment %>
-                  </td>
-                  <td>
-                    <%= item.outTime %>
-                  </td>
-                  <td>
-                    <label class="checkbox">
-                      <input class="damaged-checkbox" type="checkbox" data-logid="<%= item.logID %>" />
-                      <span class="checkmark"></span>
-                    </label>
-                  </td>
-                  <td>
-                    <label class="checkbox">
-                      <input class="equipment-checkbox" type="checkbox" data-logid="<%= item.logID %>"
-                        data-equipment="<%= item.equipment %>" />
-                      <span class="checkmark"></span>
-                    </label>
-                  </td>
-                </tr>
-                <% }); %>
-            </tbody>
-          </table>
+      <p class="noPendingEquipment">No pending equipment</p>
+      <% } else { %>
+      <table border="1" cellpadding="5">
+        <thead>
+          <tr>
+            <th>Equipment</th>
+            <th>Checkout Time</th>
+            <th>Damaged</th>
+            <th>
+              <label class="checkbox">
+                <input id="selectAllReturns" type="checkbox" />
+                <span class="checkmark"></span>
+              </label>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <% equipment.forEach(function(item) { %>
+          <tr>
+            <td><%= item.equipment %></td>
+            <td><%= item.outTime %></td>
+            <td>
+              <label class="checkbox">
+                <input
+                  class="damaged-checkbox"
+                  type="checkbox"
+                  data-logid="<%= item.logID %>"
+                />
+                <span class="checkmark"></span>
+              </label>
+            </td>
+            <td>
+              <label class="checkbox">
+                <input
+                  class="equipment-checkbox"
+                  type="checkbox"
+                  data-logid="<%= item.logID %>"
+                  data-equipment="<%= item.equipment %>"
+                />
+                <span class="checkmark"></span>
+              </label>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
 
-          <br />
-          <% } %>
+      <br />
+      <% } %>
 
-            <div class="bottom">
-              <% if (equipment.length !=0) { %>
-                <div class="button-group">
-                  <button id="returnAllBtn">Return All</button>
-                  <button id="returnSelectedBtn">Return Selected</button>
-                </div>
-                <% }%>
-            </div>
+      <div class="bottom">
+        <% if (equipment.length !=0) { %>
+        <div class="button-group">
+          <button id="returnAllBtn">Return All</button>
+          <button id="returnSelectedBtn">Return Selected</button>
+        </div>
+        <% }%>
+      </div>
     </div>
 
     <script>
+      // Select All functionality
+      // Select-all checkbox logic
+      document
+        .getElementById("selectAllReturns")
+        ?.addEventListener("change", function () {
+          const allReturnCheckboxes = document.querySelectorAll(
+            ".equipment-checkbox"
+          );
+
+          allReturnCheckboxes.forEach((cb) => {
+            cb.checked = this.checked;
+          });
+        });
+      // Keep select-all checkbox in sync with individual selections
+      document.querySelectorAll(".equipment-checkbox").forEach((cb) => {
+        cb.addEventListener("change", () => {
+          const all = document.querySelectorAll(".equipment-checkbox");
+          const checked = document.querySelectorAll(
+            ".equipment-checkbox:checked"
+          );
+
+          const selectAll = document.getElementById("selectAllReturns");
+          if (selectAll) {
+            selectAll.checked = all.length === checked.length;
+          }
+        });
+      });
+
       // Return Selected functionality
       document
         .getElementById("returnSelectedBtn")
@@ -240,6 +275,5 @@
           }
         });
     </script>
-</body>
-
+  </body>
 </html>

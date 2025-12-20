@@ -50,8 +50,8 @@
   transition: all 0.3s ease;
 }
 
-.select-all-btn:hover {
-  background: #0a2a4a;
+.select-all-btn:hover .checkmark {
+  background: #a2b5c8;
 }
 
 .table-container {
@@ -98,6 +98,21 @@ tbody td {
   color: var(--text-color);
   font-size: 15px;
 }
+thead th,
+tbody td {
+  vertical-align: middle;
+}
+
+thead th:last-child,
+tbody td:last-child,
+thead th:nth-child(3),
+tbody td:nth-child(3) {
+  text-align: center;
+}
+/* Hover effect only for select-all checkbox */
+#selectAllReturns + .checkmark:hover {
+  background-color: #bfd4db;
+}
 
 .checkbox {
   position: relative;
@@ -130,7 +145,7 @@ tbody td {
   background-color: rgba(13, 56, 98, 0.1);
 }
 
-.checkbox input:checked~.checkmark {
+.checkbox input:checked ~ .checkmark {
   background-color: var(--primary-color);
   border-color: var(--primary-color);
 }
@@ -148,7 +163,7 @@ tbody td {
   transform: rotate(45deg);
 }
 
-.checkbox input:checked~.checkmark:after {
+.checkbox input:checked ~ .checkmark:after {
   display: block;
 }
 
