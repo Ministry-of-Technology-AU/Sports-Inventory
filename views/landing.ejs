@@ -67,8 +67,8 @@
             <thead>
               <tr>
                 <th>Equipment</th>
-                <th>Quantity Borrowed</th>
                 <th>Checkout Time</th>
+                <th>Damaged</th>
                 <th>Return</th>
               </tr>
             </thead>
@@ -79,15 +79,18 @@
                     <%= item.equipment %>
                   </td>
                   <td>
-                    <%= item.outNum %>
-                  </td>
-                  <td>
                     <%= item.outTime %>
                   </td>
                   <td>
                     <label class="checkbox">
-                      <input class="equipment-checkbox" type="checkbox" value="<%= item.equipment %>"
-                        data-quantity="<%= item.outNum %>" />
+                      <input class="damaged-checkbox" type="checkbox" data-logid="<%= item.logID %>" />
+                      <span class="checkmark"></span>
+                    </label>
+                  </td>
+                  <td>
+                    <label class="checkbox">
+                      <input class="equipment-checkbox" type="checkbox" data-logid="<%= item.logID %>"
+                        data-equipment="<%= item.equipment %>" />
                       <span class="checkmark"></span>
                     </label>
                   </td>
@@ -114,23 +117,35 @@
       document
         .getElementById("returnSelectedBtn")
         ?.addEventListener("click", async () => {
-          const selected = Array.from(
+          const selectedCheckboxes = Array.from(
             document.querySelectorAll(".equipment-checkbox:checked")
-          ).map((cb) => ({
-            equipment: cb.value,
-            outNum: cb.dataset.quantity
-          }));
+          );
 
-          if (selected.length === 0) {
+          if (selectedCheckboxes.length === 0) {
             alert("Please select at least one item to return.");
             return;
           }
+
+          // Get logIDs and check which ones are damaged
+          const returnData = selectedCheckboxes.map((cb) => {
+            const logID = parseInt(cb.dataset.logid);
+            const damagedCheckbox = document.querySelector(
+              `.damaged-checkbox[data-logid="${logID}"]`
+            );
+            const isDamaged = damagedCheckbox && damagedCheckbox.checked;
+
+            return {
+              logID: logID,
+              equipment: cb.dataset.equipment,
+              damaged: isDamaged,
+            };
+          });
 
           try {
             const res = await fetch("/returnMany", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ equipments: selected.map(s => s.equipment) }),
+              body: JSON.stringify({ returns: returnData }),
             });
 
             const data = await res.json();
@@ -141,9 +156,12 @@
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  issuedEquipment: selected,
+                  issuedEquipment: returnData.map((r) => ({
+                    equipment: r.equipment,
+                    outNum: 1,
+                  })),
                   name: "<%= student.name %>",
-                  mode: "returned"
+                  mode: "returned",
                 }),
               });
 
@@ -167,19 +185,30 @@
             return;
           }
 
-          // Get all equipment names and quantities from the table
-          const allEquipment = Array.from(
+          // Get all checkboxes and their damaged status
+          const allCheckboxes = Array.from(
             document.querySelectorAll(".equipment-checkbox")
-          ).map((cb) => ({
-            equipment: cb.value,
-            outNum: cb.dataset.quantity
-          }));
+          );
+
+          const returnData = allCheckboxes.map((cb) => {
+            const logID = parseInt(cb.dataset.logid);
+            const damagedCheckbox = document.querySelector(
+              `.damaged-checkbox[data-logid="${logID}"]`
+            );
+            const isDamaged = damagedCheckbox && damagedCheckbox.checked;
+
+            return {
+              logID: logID,
+              equipment: cb.dataset.equipment,
+              damaged: isDamaged,
+            };
+          });
 
           try {
             const res = await fetch("/returnMany", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ equipments: allEquipment.map(e => e.equipment) }),
+              body: JSON.stringify({ returns: returnData }),
             });
 
             const data = await res.json();
@@ -190,9 +219,12 @@
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  issuedEquipment: allEquipment,
+                  issuedEquipment: returnData.map((r) => ({
+                    equipment: r.equipment,
+                    outNum: 1,
+                  })),
                   name: "<%= student.name %>",
-                  mode: "returned"
+                  mode: "returned",
                 }),
               });
 

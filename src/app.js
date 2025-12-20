@@ -6,8 +6,8 @@ import fetch from "node-fetch";
 import dotenv from "dotenv";
 import session from "express-session";
 import { fileURLToPath } from "url";
-import passport from './passport-auth.js';
-import MySQLStore from 'express-mysql-session';
+import passport from "./passport-auth.js";
+import MySQLStore from "express-mysql-session";
 import nodemailer from "nodemailer";
 import cron from "node-cron";
 
@@ -31,12 +31,12 @@ app.set("view engine", "ejs");
 const MySQLStoreSession = MySQLStore(session);
 const sessionStoreOptions = {
   schema: {
-    tableName: 'sessions',
+    tableName: "sessions",
     columnNames: {
-      session_id: 'session_id',
-      expires: 'expires',
-      data: 'data'
-    }
+      session_id: "session_id",
+      expires: "expires",
+      data: "data",
+    },
   },
   expiration: 7 * 24 * 60 * 60 * 1000, // 1 week
   checkExpirationInterval: 15 * 60 * 1000, // 15 minutes
@@ -69,17 +69,26 @@ function logToFile(msg) {
 
 // Create nodemailer transporter
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  service: "gmail",
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
+    pass: process.env.EMAIL_PASS,
+  },
 });
 
 // Load email templates
-const BORROW_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/borrow.html"), "utf-8");
-const RETURN_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/return.html"), "utf-8");
-const OVERDUE_TEMPLATE = fs.readFileSync(path.join(__dirname, "../templates/overdue.html"), "utf-8");
+const BORROW_TEMPLATE = fs.readFileSync(
+  path.join(__dirname, "../templates/borrow.html"),
+  "utf-8"
+);
+const RETURN_TEMPLATE = fs.readFileSync(
+  path.join(__dirname, "../templates/return.html"),
+  "utf-8"
+);
+const OVERDUE_TEMPLATE = fs.readFileSync(
+  path.join(__dirname, "../templates/overdue.html"),
+  "utf-8"
+);
 
 /**
  * Send borrow confirmation email
@@ -95,22 +104,27 @@ async function sendBorrowEmail(studentEmail, studentName, equipmentCounts) {
       .join("<br>");
 
     // Replace placeholders in template
-    const emailHtml = BORROW_TEMPLATE
-      .replace(/{{name}}/g, studentName)
-      .replace(/{{borrowedEquipment}}/g, equipmentList);
+    const emailHtml = BORROW_TEMPLATE.replace(/{{name}}/g, studentName).replace(
+      /{{borrowedEquipment}}/g,
+      equipmentList
+    );
 
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: studentEmail,
       subject: "Sports Equipment Borrowed - Confirmation",
-      html: emailHtml
+      html: emailHtml,
     };
 
     const info = await transporter.sendMail(mailOptions);
-    logToFile(`📧 Borrow email sent to ${studentEmail} - MessageID: ${info.messageId}`);
+    logToFile(
+      `📧 Borrow email sent to ${studentEmail} - MessageID: ${info.messageId}`
+    );
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    logToFile(`❌ Failed to send borrow email to ${studentEmail}: ${error.message}`);
+    logToFile(
+      `❌ Failed to send borrow email to ${studentEmail}: ${error.message}`
+    );
     return { success: false, error: error.message };
   }
 }
@@ -129,22 +143,27 @@ async function sendReturnEmail(studentEmail, studentName, equipmentCounts) {
       .join("<br>");
 
     // Replace placeholders in template
-    const emailHtml = RETURN_TEMPLATE
-      .replace(/{{name}}/g, studentName)
-      .replace(/{{returnedEquipment}}/g, equipmentList);
+    const emailHtml = RETURN_TEMPLATE.replace(/{{name}}/g, studentName).replace(
+      /{{returnedEquipment}}/g,
+      equipmentList
+    );
 
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: studentEmail,
       subject: "Sports Equipment Returned - Confirmation",
-      html: emailHtml
+      html: emailHtml,
     };
 
     const info = await transporter.sendMail(mailOptions);
-    logToFile(`📧 Return email sent to ${studentEmail} - MessageID: ${info.messageId}`);
+    logToFile(
+      `📧 Return email sent to ${studentEmail} - MessageID: ${info.messageId}`
+    );
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    logToFile(`❌ Failed to send return email to ${studentEmail}: ${error.message}`);
+    logToFile(
+      `❌ Failed to send return email to ${studentEmail}: ${error.message}`
+    );
     return { success: false, error: error.message };
   }
 }
@@ -163,22 +182,27 @@ async function sendOverdueEmail(studentEmail, studentName, equipmentCounts) {
       .join("<br>");
 
     // Replace placeholders in template
-    const emailHtml = OVERDUE_TEMPLATE
-      .replace(/{{name}}/g, studentName)
-      .replace(/{{pendingEquipment}}/g, equipmentList);
+    const emailHtml = OVERDUE_TEMPLATE.replace(
+      /{{name}}/g,
+      studentName
+    ).replace(/{{pendingEquipment}}/g, equipmentList);
 
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: studentEmail,
       subject: "⚠️ Sports Equipment Overdue - Return Required",
-      html: emailHtml
+      html: emailHtml,
     };
 
     const info = await transporter.sendMail(mailOptions);
-    logToFile(`📧 Overdue email sent to ${studentEmail} - MessageID: ${info.messageId}`);
+    logToFile(
+      `📧 Overdue email sent to ${studentEmail} - MessageID: ${info.messageId}`
+    );
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    logToFile(`❌ Failed to send overdue email to ${studentEmail}: ${error.message}`);
+    logToFile(
+      `❌ Failed to send overdue email to ${studentEmail}: ${error.message}`
+    );
     return { success: false, error: error.message };
   }
 }
@@ -197,7 +221,7 @@ const overdueEmailTracker = new Map(); // studentID -> lastEmailDate (YYYY-MM-DD
 async function checkAndNotifyOverdue() {
   try {
     logToFile("🔄 Running overdue check...");
-    
+
     const now = moment().tz("Asia/Kolkata");
     const currentTime = now.format("YYYY-MM-DD HH:mm:ss");
     const today = now.format("YYYY-MM-DD");
@@ -229,29 +253,33 @@ async function checkAndNotifyOverdue() {
 
     // Group by student
     const studentOverdueMap = new Map();
-    
-    overdueItems.forEach(item => {
+
+    overdueItems.forEach((item) => {
       if (!studentOverdueMap.has(item.studentID)) {
         studentOverdueMap.set(item.studentID, {
           studentEmail: item.studentEmail,
           studentName: item.studentName,
-          equipment: {}
+          equipment: {},
         });
       }
-      
+
       const student = studentOverdueMap.get(item.studentID);
       student.equipment[item.equipmentBorrowed] = item.quantity;
     });
 
-    logToFile(`   📊 Found ${studentOverdueMap.size} students with overdue equipment`);
+    logToFile(
+      `   📊 Found ${studentOverdueMap.size} students with overdue equipment`
+    );
 
     // Send emails (one per student per day)
     for (const [studentID, data] of studentOverdueMap.entries()) {
       const lastEmailDate = overdueEmailTracker.get(studentID);
-      
+
       // Check if we already sent an email today
       if (lastEmailDate === today) {
-        logToFile(`   ⏭️  Skipping ${data.studentName} - already emailed today`);
+        logToFile(
+          `   ⏭️  Skipping ${data.studentName} - already emailed today`
+        );
         continue;
       }
 
@@ -278,12 +306,16 @@ async function checkAndNotifyOverdue() {
 
 // Schedule cron job to run every 12 hours (at 8 AM and 8 PM)
 // Format: "minute hour * * *" where * means every day
-cron.schedule('0 8,20 * * *', () => {
-  logToFile("⏰ Cron job triggered: Starting overdue check");
-  checkAndNotifyOverdue();
-}, {
-  timezone: "Asia/Kolkata"
-});
+cron.schedule(
+  "0 8,20 * * *",
+  () => {
+    logToFile("⏰ Cron job triggered: Starting overdue check");
+    checkAndNotifyOverdue();
+  },
+  {
+    timezone: "Asia/Kolkata",
+  }
+);
 
 // Run once on startup (after a short delay to let DB initialize)
 setTimeout(() => {
@@ -295,22 +327,20 @@ setTimeout(() => {
 // END OVERDUE TRACKING
 // ========================================================
 
-const publicPaths = [
-  '/auth/google',
-  '/auth/google/callback',
-  '/unauthorized',
-];
+const publicPaths = ["/auth/google", "/auth/google/callback", "/unauthorized"];
 
-app.use(session({
-  key: 'mailroom_sid',
-  secret: process.env.SECRET_KEY || 'your_session_secret',
-  store: sessionStore,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 1 week
-  }
-}));
+app.use(
+  session({
+    key: "mailroom_sid",
+    secret: process.env.SECRET_KEY || "your_session_secret",
+    store: sessionStore,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
+    },
+  })
+);
 
 app.use(passport.initialize());
 app.use(passport.session());
@@ -318,37 +348,40 @@ app.use(passport.session());
 // Global authentication middleware
 app.use((req, res, next) => {
   // Public paths don't need any authentication
-  if (publicPaths && publicPaths.includes(req.path) || req.path.startsWith('/auth/')) {
+  if (
+    (publicPaths && publicPaths.includes(req.path)) ||
+    req.path.startsWith("/auth/")
+  ) {
     return next();
   }
-  
+
   // Admin pages require OAuth authentication
-  const adminPaths = ['/admin', '/statistics', '/dashboard'];
+  const adminPaths = ["/admin", "/statistics", "/dashboard"];
   if (adminPaths.includes(req.path)) {
     return ensureAuthenticated(req, res, next);
   }
-  
+
   // Student pages (/issue, /landing, etc.) require student session (QR code login)
-  const studentPaths = ['/issue', '/landing', '/team_landing'];
+  const studentPaths = ["/issue", "/landing", "/team_landing"];
   if (studentPaths.includes(req.path)) {
     // Allow if user has student session OR is OAuth authenticated
     if (req.session.student || req.isAuthenticated()) {
       return next();
     }
     // Redirect to appropriate login page
-    if (req.path === '/issue') {
-      return res.redirect('/issue_login');
+    if (req.path === "/issue") {
+      return res.redirect("/issue_login");
     }
-    return res.redirect('/return_login');
+    return res.redirect("/return_login");
   }
-  
+
   // For POST routes and other paths, allow if either auth method is present
   if (req.session.student || req.isAuthenticated()) {
     return next();
   }
-  
+
   // Default: redirect to issue login
-  res.redirect('/issue_login');
+  res.redirect("/issue_login");
 });
 
 function ensureAuthenticated(req, res, next) {
@@ -376,14 +409,14 @@ app.get(
   "/auth/google/callback",
   passport.authenticate("google", {
     failureRedirect: "/unauthorized",
-    failureMessage: true
+    failureMessage: true,
   }),
   (req, res) => {
     if (req.session.messages) {
       console.error("Authentication failure:", req.session.messages);
     }
 
-    const returnTo = req.session.returnTo || '/issue_login';
+    const returnTo = req.session.returnTo || "/issue_login";
     delete req.session.returnTo;
     res.redirect(returnTo);
   }
@@ -405,7 +438,9 @@ app.get("/logout", (req, res, next) => {
 });
 
 app.get("/unauthorized", (req, res) => {
-  res.render("error", { msg: "Unauthorized: Your email is not authorized to access this system." });
+  res.render("error", {
+    msg: "Unauthorized: Your email is not authorized to access this system.",
+  });
 });
 
 const BASE_URL = process.env.BASE_URL;
@@ -413,14 +448,14 @@ const BASE_URL = process.env.BASE_URL;
 app.get("/", (req, res) => {
   res.render("issue_login", {
     activePage: "issue",
-    user: req.user?.name || "Guest"
+    user: req.user?.name || "Guest",
   });
 });
 
 app.get("/issue_login", (req, res) => {
   res.render("issue_login", {
     activePage: "issue",
-    user: req.user?.name || "Guest"
+    user: req.user?.name || "Guest",
   });
 });
 
@@ -439,7 +474,7 @@ app.post("/issue_login", (req, res) => {
 app.post("/issue_login_sports", (req, res) => {
   const ashokaId = req.body.qrString?.trim();
   // In the Students table, check under the column sportsTeamAuthorised
-  // If yes, redirected to endpoint /issue_login 
+  // If yes, redirected to endpoint /issue_login
   // Else, render error page with message "not sports team authorised"
   db.query(
     "SELECT sportsTeamAuthorised FROM Students WHERE studentID = ?",
@@ -459,7 +494,9 @@ app.post("/issue_login_sports", (req, res) => {
       if (isAuthorised) {
         res.redirect("/issue_login");
       } else {
-        res.render("error", { msg: "Unauthorized: You are not authorised as a sports team member." });
+        res.render("error", {
+          msg: "Unauthorized: You are not authorised as a sports team member.",
+        });
       }
     }
   );
@@ -484,9 +521,10 @@ function calculateAvailableEquipment(callback) {
     }
 
     const availableItems = {};
-    results.forEach(row => {
+    results.forEach((row) => {
       // Available = Total - InUse - Pending
-      availableItems[row.equipment] = row.totalQuantity - row.inUseQuantity - row.pendingCount;
+      availableItems[row.equipment] =
+        row.totalQuantity - row.inUseQuantity - row.pendingCount;
     });
 
     callback(null, availableItems);
@@ -509,14 +547,13 @@ function getInUseEquipment(callback) {
     }
 
     const inUseItems = {};
-    results.forEach(row => {
+    results.forEach((row) => {
       inUseItems[row.equipment] = row.inUseCount;
     });
 
     callback(null, inUseItems);
   });
 }
-
 
 // Sports team issue endpoint
 app.get("/issue_team", (req, res) => {
@@ -537,9 +574,14 @@ app.get("/issue_team", (req, res) => {
 
         const studentEmail = emailResults[0].studentEmail;
         const studentName = req.session.student.name;
-        const currentDate = new Date().toISOString().split('T')[0];
+        const currentDate = new Date().toISOString().split("T")[0];
 
-        console.log("Querying with information: ", studentEmail, studentName, currentDate);
+        console.log(
+          "Querying with information: ",
+          studentEmail,
+          studentName,
+          currentDate
+        );
 
         // Check for valid sports request
         db.query(
@@ -559,16 +601,17 @@ app.get("/issue_team", (req, res) => {
 
             if (results.length === 0) {
               return res.render("error", {
-                errorMsg: "No valid sports equipment request found for your account. Please use the regular issue portal.",
-                user: req.user?.name || "Guest"
+                errorMsg:
+                  "No valid sports equipment request found for your account. Please use the regular issue portal.",
+                user: req.user?.name || "Guest",
               });
             }
 
             // Transform results to match the frontend's expected format
-            const equipment = results.map(item => ({
+            const equipment = results.map((item) => ({
               equipment: item.equipment,
               outNum: item.quantity,
-              outTime: item.approvedOn || new Date().toISOString()
+              outTime: item.approvedOn || new Date().toISOString(),
             }));
 
             // Render the team issue page
@@ -576,7 +619,7 @@ app.get("/issue_team", (req, res) => {
               student: req.session.student,
               equipment: equipment,
               activePage: "issue",
-              user: req.user?.name || "Guest"
+              user: req.user?.name || "Guest",
             });
           }
         );
@@ -605,7 +648,7 @@ app.get("/issue", (req, res) => {
 
       // Transform results into a more usable format
       const availableItems = {};
-      results.forEach(row => {
+      results.forEach((row) => {
         availableItems[row.equipment] = row.available;
       });
 
@@ -613,7 +656,7 @@ app.get("/issue", (req, res) => {
         student: req.session.student,
         availableItems: availableItems,
         activePage: "issue",
-        user: req.user?.name || "Guest"
+        user: req.user?.name || "Guest",
       });
     }
   );
@@ -625,7 +668,9 @@ app.post("/issue", (req, res) => {
   const quantity = req.body.quantity || {};
 
   // Get list of equipment to issue (where quantity > 0)
-  const equipmentList = Object.keys(quantity).filter(item => Number(quantity[item]) > 0);
+  const equipmentList = Object.keys(quantity).filter(
+    (item) => Number(quantity[item]) > 0
+  );
 
   if (equipmentList.length === 0) {
     return res.redirect("/landing");
@@ -644,7 +689,7 @@ app.post("/issue", (req, res) => {
       const studentEmail = emailResults[0].studentEmail;
 
       // Double-check availability before proceeding (race condition protection)
-      const placeholders = equipmentList.map(() => '?').join(',');
+      const placeholders = equipmentList.map(() => "?").join(",");
 
       db.query(
         `SELECT 
@@ -665,7 +710,7 @@ app.post("/issue", (req, res) => {
 
           // Check if requested quantities are available
           const availabilityMap = {};
-          availResults.forEach(row => {
+          availResults.forEach((row) => {
             availabilityMap[row.equipment] = row.available;
           });
 
@@ -674,9 +719,11 @@ app.post("/issue", (req, res) => {
             const available = availabilityMap[item] || 0;
 
             if (requested > available) {
-              return res.status(400).send(
-                `Not enough ${item} available. Requested: ${requested}, Available: ${available}`
-              );
+              return res
+                .status(400)
+                .send(
+                  `Not enough ${item} available. Requested: ${requested}, Available: ${available}`
+                );
             }
           }
 
@@ -689,7 +736,10 @@ app.post("/issue", (req, res) => {
             const qtyToIssue = Number(quantity[item]);
 
             // Calculate due date (e.g., 7 days from now)
-            const dueDate = moment().tz("Asia/Kolkata").add(7, 'days').format("YYYY-MM-DD HH:mm:ss");
+            const dueDate = moment()
+              .tz("Asia/Kolkata")
+              .add(7, "days")
+              .format("YYYY-MM-DD HH:mm:ss");
 
             // Insert one row per unit of equipment (repeat for quantity)
             for (let i = 0; i < qtyToIssue; i++) {
@@ -710,7 +760,7 @@ app.post("/issue", (req, res) => {
                   req.session.student.AshokaId,
                   studentEmail,
                   req.session.student.name,
-                  dueDate
+                  dueDate,
                 ],
                 (insertErr) => {
                   if (insertErr) {
@@ -735,7 +785,7 @@ app.post("/issue", (req, res) => {
                     equipmentList.forEach((eq) => {
                       issuedEquipment.push({
                         equipment: eq,
-                        outNum: Number(quantity[eq])
+                        outNum: Number(quantity[eq]),
                       });
                     });
 
@@ -746,18 +796,21 @@ app.post("/issue", (req, res) => {
                     });
 
                     // Send borrow confirmation email (non-blocking)
-                    sendBorrowEmail(studentEmail, req.session.student.name, equipmentCounts)
-                      .catch(err => {
-                        console.error("Email send error:", err);
-                        // Don't block the response on email failure
-                      });
+                    sendBorrowEmail(
+                      studentEmail,
+                      req.session.student.name,
+                      equipmentCounts
+                    ).catch((err) => {
+                      console.error("Email send error:", err);
+                      // Don't block the response on email failure
+                    });
 
                     // Render success page with equipment details
                     res.render("success", {
                       studentName: req.session.student.name,
                       equipment: issuedEquipment,
                       user: req.user?.name || "Guest",
-                      mode: "issued"
+                      mode: "issued",
                     });
                   }
                 }
@@ -773,7 +826,7 @@ app.post("/issue", (req, res) => {
 app.post("/issue_team_equipment", (req, res) => {
   const selectedEquipments = req.body.equipments;
   const studentName = req.session.student.name;
-  const currentDate = new Date().toISOString().split('T')[0];
+  const currentDate = new Date().toISOString().split("T")[0];
 
   if (!selectedEquipments || selectedEquipments.length === 0) {
     return res.json({ success: false, error: "No equipment selected" });
@@ -792,9 +845,15 @@ app.post("/issue_team_equipment", (req, res) => {
       const studentEmail = emailResults[0].studentEmail;
 
       // Create placeholders for the IN clause
-      const placeholders = selectedEquipments.map(() => '?').join(',');
+      const placeholders = selectedEquipments.map(() => "?").join(",");
 
-      console.log("Querying issue with the following info: ", studentEmail, studentName, selectedEquipments, currentDate);
+      console.log(
+        "Querying issue with the following info: ",
+        studentEmail,
+        studentName,
+        selectedEquipments,
+        currentDate
+      );
 
       // First, get the equipment details before updating
       db.query(
@@ -805,7 +864,13 @@ app.post("/issue_team_equipment", (req, res) => {
          AND startDate <= ? 
          AND endDate >= ? 
          AND (issued IS NULL OR issued = FALSE)`,
-        [studentEmail, studentName, ...selectedEquipments, currentDate, currentDate],
+        [
+          studentEmail,
+          studentName,
+          ...selectedEquipments,
+          currentDate,
+          currentDate,
+        ],
         (err, equipmentResults) => {
           if (err) {
             console.error("Database error:", err);
@@ -815,14 +880,14 @@ app.post("/issue_team_equipment", (req, res) => {
           if (equipmentResults.length === 0) {
             return res.json({
               success: false,
-              error: "No valid requests found to issue"
+              error: "No valid requests found to issue",
             });
           }
 
           // Store equipment in session for success page
-          req.session.issuedEquipment = equipmentResults.map(item => ({
+          req.session.issuedEquipment = equipmentResults.map((item) => ({
             equipment: item.equipment,
-            outNum: item.quantity
+            outNum: item.quantity,
           }));
 
           // Update issued status for selected equipment
@@ -835,7 +900,13 @@ app.post("/issue_team_equipment", (req, res) => {
              AND startDate <= ? 
              AND endDate >= ? 
              AND (issued IS NULL OR issued = FALSE)`,
-            [studentEmail, studentName, ...selectedEquipments, currentDate, currentDate],
+            [
+              studentEmail,
+              studentName,
+              ...selectedEquipments,
+              currentDate,
+              currentDate,
+            ],
             (err, results) => {
               if (err) {
                 console.error("Database error:", err);
@@ -854,7 +925,7 @@ app.post("/issue_team_equipment", (req, res) => {
 app.get("/return_login", (req, res) => {
   res.render("return_login", {
     activePage: "landing",
-    user: req.user?.name || "Guest"
+    user: req.user?.name || "Guest",
   });
 });
 
@@ -877,7 +948,7 @@ app.get("/landing", (req, res) => {
   res.render("landing_redirect", {
     ashokaId: req.session.student.AshokaId,
     activePage: "landing",
-    user: req.user?.name || "Guest"
+    user: req.user?.name || "Guest",
   });
 });
 
@@ -921,136 +992,152 @@ app.post("/landing", async (req, res) => {
       res.render("landing", {
         student: studentData,
         equipment: results,
-        user: req.user?.name || "Guest"
+        user: req.user?.name || "Guest",
       });
     }
   );
 });
 
-app.post('/getequipment', (req, res) => {
-  db.query('SELECT equipment FROM Equipment', (err, rows) => {
+app.post("/getequipment", (req, res) => {
+  db.query("SELECT equipment FROM Equipment", (err, rows) => {
     if (err) {
       console.error("Database error:", err);
       return res.status(500).json({ error: "Database error" });
     }
 
-    const equipmentList = rows.map(row => row.equipment);
+    const equipmentList = rows.map((row) => row.equipment);
     console.log("Equipment List:", equipmentList);
 
     res.json({ equipment: equipmentList });
   });
 });
 
-app.post("/returnMany", (req, res) => {
+app.post("/returnMany", async (req, res) => {
   if (!req.session.student) {
     return res.status(401).json({ success: false, error: "Not logged in" });
   }
 
-  const { equipments } = req.body;
+  const { returns } = req.body;
   const studentId = req.session.student.AshokaId;
   const returnTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 
-  if (!equipments || equipments.length === 0) {
+  if (!returns || returns.length === 0) {
     return res.json({ success: false, error: "No items selected" });
   }
 
-  let completed = 0;
-  let hasError = false;
-  const returnedItems = {};
+  const connection = await pool.getConnection();
 
-  equipments.forEach((equipment) => {
-    db.query(
-      `SELECT * FROM Logs 
-       WHERE studentID = ? AND equipmentBorrowed = ? AND pending = TRUE AND returned = FALSE
-       ORDER BY timestamp ASC 
-       LIMIT 1`,
-      [studentId, equipment],
-      (err, rows) => {
-        if (err || rows.length === 0) {
-          console.error("DB fetch error:", err);
-          hasError = true;
-          completed++;
-          if (completed === equipments.length) {
-            return res.json({
-              success: !hasError,
-              error: hasError ? "Some returns failed" : null,
-            });
-          }
-          return;
-        }
+  try {
+    await connection.beginTransaction();
 
-        const row = rows[0];
-        
-        // Set returnedByID and returnedByEmail to NULL to avoid FK constraint violations
-        // FK constraints require these values to exist in Students table
-        // The OAuth admin email (req.user?.email) won't be in Students table
-        const returnedByID = null;
-        const returnedByEmail = null;
+    // Track only DAMAGED items for inventory changes
+    const damagedUpdates = {};
+    const returnedItems = {};
 
-        db.query(
-          `UPDATE Logs 
-           SET pending = FALSE, 
-               returned = TRUE, 
-               returnedTimestamp = ?,
-               returnedByID = ?,
-               returnedByEmail = ?
-           WHERE logID = ?`,
-          [returnTime, returnedByID, returnedByEmail, row.logID],
-          (updateErr) => {
-            if (updateErr) {
-              console.error("DB update error for equipment:", equipment, "logID:", row.logID);
-              console.error("Error details:", updateErr);
-              hasError = true;
-            } else {
-              console.log("Successfully returned:", equipment, "logID:", row.logID);
-              // Track returned items (count duplicates)
-              returnedItems[equipment] = (returnedItems[equipment] || 0) + 1;
-            }
+    for (const returnItem of returns) {
+      const { logID, equipment, damaged } = returnItem;
 
-            completed++;
-            if (completed === equipments.length) {
-              // All returns processed - send email if any succeeded
-              if (!hasError && Object.keys(returnedItems).length > 0) {
-                // Get student email from MySQL
-                db.query(
-                  "SELECT studentEmail, studentName FROM Students WHERE studentID = ?",
-                  [studentId],
-                  (emailErr, emailResults) => {
-                    if (!emailErr && emailResults.length > 0) {
-                      const { studentEmail, studentName } = emailResults[0];
-                      // Send return confirmation email (non-blocking)
-                      sendReturnEmail(studentEmail, studentName, returnedItems)
-                        .catch(err => {
-                          console.error("Return email send error:", err);
-                        });
-                    } else {
-                      console.error("Could not fetch student email for return notification");
-                    }
-                  }
-                );
-              }
+      // Ensure log is valid and pending
+      const [logRows] = await connection.query(
+        `SELECT logID FROM Logs
+         WHERE logID = ? AND studentID = ? AND pending = TRUE AND returned = FALSE`,
+        [logID, studentId]
+      );
 
-              return res.json({
-                success: !hasError,
-                error: hasError ? "Some returns failed - check server logs" : null,
-              });
-            }
-          }
+      if (logRows.length === 0) {
+        await connection.rollback();
+        return res.json({
+          success: false,
+          error: `Log entry ${logID} not found or already returned`,
+        });
+      }
+
+      // Mark log as returned
+      await connection.query(
+        `UPDATE Logs
+         SET pending = FALSE,
+             returned = TRUE,
+             returnedTimestamp = ?,
+             returnedByID = NULL,
+             returnedByEmail = NULL,
+             damaged = ?
+         WHERE logID = ?`,
+        [returnTime, damaged ? "Yes" : "No", logID]
+      );
+
+      // Only damaged items affect inventory counts
+      if (damaged) {
+        damagedUpdates[equipment] = (damagedUpdates[equipment] || 0) + 1;
+      }
+
+      // Track for email
+      returnedItems[equipment] = (returnedItems[equipment] || 0) + 1;
+    }
+
+    // Reduce usable stock for damaged items
+    const damagedInventoryPromises = Object.keys(damagedUpdates).map(
+      async (equipment) => {
+        const qty = damagedUpdates[equipment];
+
+        const [result] = await connection.query(
+          `UPDATE Equipment
+           SET inUseQuantity = inUseQuantity - ?,
+               damagedQuantity = damagedQuantity + ?
+           WHERE equipment = ?`,
+          [qty, qty, equipment]
         );
+
+        if (result.affectedRows === 0) {
+          throw new Error(
+            `Equipment "${equipment}" not found during damaged update`
+          );
+        }
       }
     );
-  });
+
+    await Promise.all(damagedInventoryPromises);
+    await connection.commit();
+
+    // Send return confirmation email (non-blocking)
+    try {
+      const emailResults = await db.query(
+        "SELECT studentEmail, studentName FROM Students WHERE studentID = ?",
+        [studentId]
+      );
+
+      if (emailResults.length > 0) {
+        const { studentEmail, studentName } = emailResults[0];
+        sendReturnEmail(studentEmail, studentName, returnedItems).catch(
+          () => {}
+        );
+      }
+    } catch (_) {}
+
+    res.json({ success: true });
+  } catch (err) {
+    await connection.rollback();
+    console.error("Error returning equipment:", err);
+    res.json({
+      success: false,
+      error: "Failed to return equipment: " + err.message,
+    });
+  } finally {
+    connection.release();
+  }
 });
 
-app.post('/sports_request', (req, res) => {
-  const { studentEmail, studentName, equipment, quantity, startDate, endDate } = req.body;
+app.post("/sports_request", (req, res) => {
+  const { studentEmail, studentName, equipment, quantity, startDate, endDate } =
+    req.body;
 
   if (!studentEmail || !studentName || !equipment || !quantity || !endDate) {
     return res.status(400).json({ message: "All fields are required." });
   }
 
   if (quantity <= 0) {
-    return res.status(400).json({ message: "Quantity must be a positive number." });
+    return res
+      .status(400)
+      .json({ message: "Quantity must be a positive number." });
   }
 
   const query = `
@@ -1058,16 +1145,20 @@ app.post('/sports_request', (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?)
   `;
 
-  db.query(query, [studentEmail, studentName, equipment, quantity, startDate, endDate], (err) => {
-    if (err) {
-      console.error("Database error:", err);
-      return res.status(500).json({ message: "Database insert failed." });
+  db.query(
+    query,
+    [studentEmail, studentName, equipment, quantity, startDate, endDate],
+    (err) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).json({ message: "Database insert failed." });
+      }
+      res.json({ message: "Request submitted successfully!" });
     }
-    res.json({ message: "Request submitted successfully!" });
-  });
+  );
 });
 
-app.post('/update_inventory', (req, res) => {
+app.post("/update_inventory", (req, res) => {
   const inventory = req.body.inventory;
 
   for (const item of inventory) {
@@ -1078,8 +1169,10 @@ app.post('/update_inventory', (req, res) => {
     const { reservedQuantity, damagedQuantity, inUseQuantity } = item;
 
     const nums = [reservedQuantity, damagedQuantity, inUseQuantity];
-    if (nums.some(n => Number.isNaN(n) || n < 0)) {
-      return res.status(400).json({ error: `Quantities must be non-negative numbers.` });
+    if (nums.some((n) => Number.isNaN(n) || n < 0)) {
+      return res
+        .status(400)
+        .json({ error: `Quantities must be non-negative numbers.` });
     }
 
     item.totalQuantity = reservedQuantity + damagedQuantity + inUseQuantity;
@@ -1087,7 +1180,7 @@ app.post('/update_inventory', (req, res) => {
 
   let completed = 0;
 
-  inventory.forEach(item => {
+  inventory.forEach((item) => {
     db.query(
       `INSERT INTO Equipment (equipment, totalQuantity, reservedQuantity, damagedQuantity, inUseQuantity)
        VALUES (?, ?, ?, ?, ?)
@@ -1101,7 +1194,7 @@ app.post('/update_inventory', (req, res) => {
         item.totalQuantity,
         item.reservedQuantity,
         item.damagedQuantity,
-        item.inUseQuantity
+        item.inUseQuantity,
       ],
       (err) => {
         if (err) {
@@ -1118,21 +1211,21 @@ app.post('/update_inventory', (req, res) => {
   });
 });
 
-app.get('/team_landing', (req, res) => {
-  res.render('team_landing', {
-    activePage: 'team-landing',
-    user: req.user?.name || "Guest"
+app.get("/team_landing", (req, res) => {
+  res.render("team_landing", {
+    activePage: "team-landing",
+    user: req.user?.name || "Guest",
   });
 });
 
-app.get('/admin', (req, res) => {
-  db.query('SELECT * FROM Equipment', (err, results) => {
+app.get("/admin", (req, res) => {
+  db.query("SELECT * FROM Equipment", (err, results) => {
     if (err) {
-      console.error('Database error:', err);
-      return res.status(500).send('Database error');
+      console.error("Database error:", err);
+      return res.status(500).send("Database error");
     }
 
-    const equipmentData = results.map(row => ({
+    const equipmentData = results.map((row) => ({
       equipment: row.equipment,
       totalQuantity: row.totalQuantity,
       reservedQuantity: row.reservedQuantity,
@@ -1142,27 +1235,49 @@ app.get('/admin', (req, res) => {
 
     console.log("Equipment Data:", equipmentData);
 
-    res.render('admin', {
-      activePage: 'admin',
+    res.render("admin", {
+      activePage: "admin",
       user: req.user?.name || "Guest",
-      equipment: equipmentData
+      equipment: equipmentData,
     });
   });
 });
 
-app.get('/statistics', (req, res) => {
-  res.render('dashboard', {
-    activePage: 'statistics',
-    user: req.user?.name || "Guest"
+app.get("/statistics", (req, res) => {
+  res.render("dashboard", {
+    activePage: "statistics",
+    user: req.user?.name || "Guest",
   });
 });
 
-app.post('/success', (req, res) => {
-  res.render('success', {
+app.post("/success", (req, res) => {
+  const equipmentArray = req.body.issuedEquipment || [];
+
+  // Group equipment by name and sum quantities
+  const groupedEquipment = {};
+
+  equipmentArray.forEach((item) => {
+    const equipmentName = item.equipment || item;
+    const quantity = item.outNum || 1;
+
+    if (groupedEquipment[equipmentName]) {
+      groupedEquipment[equipmentName] += quantity;
+    } else {
+      groupedEquipment[equipmentName] = quantity;
+    }
+  });
+
+  // Convert grouped object back to array format
+  const groupedArray = Object.keys(groupedEquipment).map((equipment) => ({
+    equipment: equipment,
+    outNum: groupedEquipment[equipment],
+  }));
+
+  res.render("success", {
     user: req.user?.name || "Guest",
     studentName: req.body.name || "Unknown",
     mode: req.body.mode || "processed",
-    equipment: req.body.issuedEquipment || []
+    equipment: groupedArray,
   });
 });
 
