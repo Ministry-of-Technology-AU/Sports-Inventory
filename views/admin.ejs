@@ -65,16 +65,26 @@
                 <th>Reserved for Teams</th>
                 <th>Damaged</th>
                 <th>In-use</th>
+                <th>Delete</th>
               </tr>
             </thead>
             <tbody id="inventory-table-body">
               <% equipment.forEach(function(item) { %>
               <tr>
                 <td contenteditable="true"><%= item.equipment %></td>
-                <td><%= item.totalQuantity %></td>
+                <td class="total-quantity"><%= item.totalQuantity %></td>
                 <td contenteditable="true"><%= item.reservedQuantity %></td>
                 <td contenteditable="true"><%= item.damagedQuantity %></td>
                 <td contenteditable="true"><%= item.inUseQuantity %></td>
+                <td>
+                  <button
+                    type="button"
+                    class="delete-equipment-btn"
+                    data-equipment="<%= item.equipment %>"
+                  >
+                    <i class="fa-solid fa-trash delete-icon"></i>
+                  </button>
+                </td>
               </tr>
               <% }); %>
             </tbody>
@@ -173,12 +183,18 @@
         const tableBody = document.getElementById("inventory-table-body");
         const newRow = document.createElement("tr");
         newRow.innerHTML = `
-        <td contenteditable="true"></td>
-        <td contenteditable="true">0</td>
-        <td contenteditable="true">0</td>
-        <td contenteditable="true">0</td>
-        <td contenteditable="true">0</td>
-    `;
+                <td contenteditable="true"></td>
+                <td class="total-quantity">0</td>
+                <td contenteditable="true">0</td>
+                <td contenteditable="true">0</td>
+                <td contenteditable="true">0</td>
+                <td>
+                    <button type="button" class="delete-equipment-btn">
+                    <i class="fa-solid fa-trash"></i>
+                    </button>
+                </td>
+                `;
+
         tableBody.appendChild(newRow);
       });
 
@@ -190,12 +206,12 @@
 
         rows.forEach((row) => {
           const cells = row.querySelectorAll("td");
+
           data.push({
             equipment: cells[0].innerText.trim(),
-            totalQuantity: parseInt(cells[1].innerText.trim(), 10),
-            reservedQuantity: parseInt(cells[2].innerText.trim(), 10),
-            damagedQuantity: parseInt(cells[3].innerText.trim(), 10),
-            inUseQuantity: parseInt(cells[4].innerText.trim(), 10),
+            reservedQuantity: parseInt(cells[2].innerText.trim(), 10) || 0,
+            damagedQuantity: parseInt(cells[3].innerText.trim(), 10) || 0,
+            inUseQuantity: parseInt(cells[4].innerText.trim(), 10) || 0,
           });
 
           // Remove highlight after saving
@@ -219,6 +235,77 @@
         e.target.style.backgroundColor = "#fff3b0"; // light yellow
       }
     });
+  </script>
+
+  <script>
+    // Delegate delete button clicks inside inventory table
+    document
+      .getElementById("inventory-table-body")
+      .addEventListener("click", function (e) {
+        const btn = e.target.closest(".delete-equipment-btn");
+        if (!btn) return;
+
+        const row = btn.closest("tr");
+        const equipmentCell = row.querySelector("td");
+        const equipmentName = equipmentCell
+          ? equipmentCell.innerText.trim()
+          : "";
+
+        // If the row is a new unsaved row without a name, just remove it
+        if (!equipmentName) {
+          if (confirm("Remove this unsaved row?")) row.remove();
+          return;
+        }
+
+        if (
+          !confirm(
+            `Delete equipment "${equipmentName}" from inventory? This will remove the item from the database.`
+          )
+        )
+          return;
+
+        fetch("/delete_inventory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ equipment: equipmentName }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success) {
+              row.remove();
+            } else {
+              alert("Delete failed: " + (data.error || "Unknown error"));
+            }
+          })
+          .catch(() => alert("Network error while deleting equipment"));
+      });
+  </script>
+  <script>
+    function recalculateTotal(row) {
+      const cells = row.querySelectorAll("td");
+
+      const reserved = parseInt(cells[2].innerText.trim(), 10) || 0;
+      const damaged = parseInt(cells[3].innerText.trim(), 10) || 0;
+      const inUse = parseInt(cells[4].innerText.trim(), 10) || 0;
+
+      const total = reserved + damaged + inUse;
+      cells[1].innerText = total;
+    }
+
+    document
+      .getElementById("inventory-table-body")
+      .addEventListener("input", function (e) {
+        const cell = e.target;
+        if (!cell.isContentEditable) return;
+
+        const row = cell.closest("tr");
+        if (!row) return;
+
+        recalculateTotal(row);
+
+        // Highlight edited cells
+        cell.style.backgroundColor = "#fff3b0";
+      });
   </script>
 
   <!--sports requests script-->

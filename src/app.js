@@ -1130,30 +1130,44 @@ app.post("/sports_request", (req, res) => {
   const { studentEmail, studentName, equipment, quantity, startDate, endDate } =
     req.body;
 
+  // Validation
   if (!studentEmail || !studentName || !equipment || !quantity || !endDate) {
-    return res.status(400).json({ message: "All fields are required." });
+    return res.status(400).json({
+      success: false,
+      message: "All fields are required.",
+    });
   }
 
   if (quantity <= 0) {
-    return res
-      .status(400)
-      .json({ message: "Quantity must be a positive number." });
+    return res.status(400).json({
+      success: false,
+      message: "Quantity must be a positive number.",
+    });
   }
 
   const query = `
-    INSERT INTO SportsRequests (studentEmail, studentName, equipment, quantity, startDate, endDate)
+    INSERT INTO SportsRequests
+    (studentEmail, studentName, equipment, quantity, startDate, endDate)
     VALUES (?, ?, ?, ?, ?, ?)
   `;
 
   db.query(
     query,
     [studentEmail, studentName, equipment, quantity, startDate, endDate],
-    (err) => {
+    (err, result) => {
       if (err) {
-        console.error("Database error:", err);
-        return res.status(500).json({ message: "Database insert failed." });
+        console.error("Error inserting sports request:", err);
+        return res.status(500).json({
+          success: false,
+          error: err.message,
+        });
       }
-      res.json({ message: "Request submitted successfully!" });
+
+      return res.status(201).json({
+        success: true,
+        message: "Sports request submitted successfully",
+        requestId: result.insertId,
+      });
     }
   );
 });
@@ -1209,6 +1223,50 @@ app.post("/update_inventory", (req, res) => {
       }
     );
   });
+});
+
+// Delete inventory item by equipment name
+app.post("/delete_inventory", (req, res) => {
+  const equipment = req.body.equipment;
+
+  if (!equipment || equipment.trim() === "") {
+    return res.status(400).json({
+      success: false,
+      error: "Equipment name required",
+    });
+  }
+
+  // Instead of deleting, zero out quantities
+  db.query(
+    `UPDATE Equipment
+     SET totalQuantity = 0,
+         reservedQuantity = 0,
+         damagedQuantity = 0,
+         inUseQuantity = 0
+     WHERE equipment = ?`,
+    [equipment],
+    (err, result) => {
+      if (err) {
+        console.error("Error zeroing equipment:", err);
+        return res.status(500).json({
+          success: false,
+          error: err.message,
+        });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          error: "Equipment not found",
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: "Equipment inventory cleared successfully",
+      });
+    }
+  );
 });
 
 app.get("/team_landing", (req, res) => {
