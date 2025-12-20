@@ -120,160 +120,195 @@
     </div>
 
     <script>
-      // Select All functionality
-      // Select-all checkbox logic
-      document
-        .getElementById("selectAllReturns")
-        ?.addEventListener("change", function () {
+      document.addEventListener("DOMContentLoaded", () => {
+        // Select All functionality: attach handlers after DOM ready
+        const selectAll = document.getElementById("selectAllReturns");
+
+        const setAllEquipmentChecked = (checked) => {
           const allReturnCheckboxes = document.querySelectorAll(
             ".equipment-checkbox"
           );
 
           allReturnCheckboxes.forEach((cb) => {
-            cb.checked = this.checked;
+            cb.checked = checked;
+            // Ensure any other listeners react to the change
+            cb.dispatchEvent(new Event("change", { bubbles: true }));
           });
-        });
-      // Keep select-all checkbox in sync with individual selections
-      document.querySelectorAll(".equipment-checkbox").forEach((cb) => {
-        cb.addEventListener("change", () => {
+        };
+
+        if (selectAll) {
+          selectAll.addEventListener("change", function () {
+            setAllEquipmentChecked(this.checked);
+          });
+
+          // Fallback: some CSS/label layouts can prevent the native toggle.
+          // Add a click handler on the wrapping label to force toggle.
+          const wrapper = selectAll.closest(".checkbox");
+          if (wrapper) {
+            wrapper.addEventListener("click", (e) => {
+              // Prevent double toggle from native label click
+              e.preventDefault();
+              selectAll.checked = !selectAll.checked;
+              setAllEquipmentChecked(selectAll.checked);
+            });
+          }
+        }
+
+        // Keep select-all checkbox in sync with individual selections
+        const equipmentCheckboxes = Array.from(
+          document.querySelectorAll(".equipment-checkbox")
+        );
+
+        const updateSelectAllState = () => {
           const all = document.querySelectorAll(".equipment-checkbox");
           const checked = document.querySelectorAll(
             ".equipment-checkbox:checked"
           );
 
-          const selectAll = document.getElementById("selectAllReturns");
-          if (selectAll) {
-            selectAll.checked = all.length === checked.length;
+          const select = document.getElementById("selectAllReturns");
+          if (!select) return;
+
+          if (checked.length === 0) {
+            select.checked = false;
+            select.indeterminate = false;
+          } else if (checked.length === all.length) {
+            select.checked = true;
+            select.indeterminate = false;
+          } else {
+            select.checked = false;
+            select.indeterminate = true;
           }
+        };
+
+        equipmentCheckboxes.forEach((cb) => {
+          cb.addEventListener("change", updateSelectAllState);
         });
+
+        // Wire up Return Selected button
+        const returnSelectedBtn = document.getElementById("returnSelectedBtn");
+        if (returnSelectedBtn) {
+          returnSelectedBtn.addEventListener("click", async () => {
+            const selectedCheckboxes = Array.from(
+              document.querySelectorAll(".equipment-checkbox:checked")
+            );
+
+            if (selectedCheckboxes.length === 0) {
+              alert("Please select at least one item to return.");
+              return;
+            }
+
+            const returnData = selectedCheckboxes.map((cb) => {
+              const logID = parseInt(cb.dataset.logid);
+              const damagedCheckbox = document.querySelector(
+                `.damaged-checkbox[data-logid="${logID}"]`
+              );
+              const isDamaged = damagedCheckbox && damagedCheckbox.checked;
+
+              return {
+                logID: logID,
+                equipment: cb.dataset.equipment,
+                damaged: isDamaged,
+              };
+            });
+
+            try {
+              const res = await fetch("/returnMany", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ returns: returnData }),
+              });
+
+              const data = await res.json();
+
+              if (data.success) {
+                const successRes = await fetch("/success", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    issuedEquipment: returnData.map((r) => ({
+                      equipment: r.equipment,
+                      outNum: 1,
+                    })),
+                    name: "<%= student.name %>",
+                    mode: "returned",
+                  }),
+                });
+
+                const successHtml = await successRes.text();
+                document.open();
+                document.write(successHtml);
+                document.close();
+              } else {
+                alert("Error: " + data.error);
+              }
+            } catch (err) {
+              alert("Network error: " + err.message);
+            }
+          });
+        }
+
+        // Return All functionality
+        const returnAllBtn = document.getElementById("returnAllBtn");
+        if (returnAllBtn) {
+          returnAllBtn.addEventListener("click", async () => {
+            if (!confirm("Are you sure you want to return all equipment?")) {
+              return;
+            }
+
+            const allCheckboxes = Array.from(
+              document.querySelectorAll(".equipment-checkbox")
+            );
+
+            const returnData = allCheckboxes.map((cb) => {
+              const logID = parseInt(cb.dataset.logid);
+              const damagedCheckbox = document.querySelector(
+                `.damaged-checkbox[data-logid="${logID}"]`
+              );
+              const isDamaged = damagedCheckbox && damagedCheckbox.checked;
+
+              return {
+                logID: logID,
+                equipment: cb.dataset.equipment,
+                damaged: isDamaged,
+              };
+            });
+
+            try {
+              const res = await fetch("/returnMany", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ returns: returnData }),
+              });
+
+              const data = await res.json();
+
+              if (data.success) {
+                const successRes = await fetch("/success", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    issuedEquipment: returnData.map((r) => ({
+                      equipment: r.equipment,
+                      outNum: 1,
+                    })),
+                    name: "<%= student.name %>",
+                    mode: "returned",
+                  }),
+                });
+
+                const successHtml = await successRes.text();
+                document.open();
+                document.write(successHtml);
+                document.close();
+              } else {
+                alert("Error: " + data.error);
+              }
+            } catch (err) {
+              alert("Network error: " + err.message);
+            }
+          });
+        }
       });
-
-      // Return Selected functionality
-      document
-        .getElementById("returnSelectedBtn")
-        ?.addEventListener("click", async () => {
-          const selectedCheckboxes = Array.from(
-            document.querySelectorAll(".equipment-checkbox:checked")
-          );
-
-          if (selectedCheckboxes.length === 0) {
-            alert("Please select at least one item to return.");
-            return;
-          }
-
-          // Get logIDs and check which ones are damaged
-          const returnData = selectedCheckboxes.map((cb) => {
-            const logID = parseInt(cb.dataset.logid);
-            const damagedCheckbox = document.querySelector(
-              `.damaged-checkbox[data-logid="${logID}"]`
-            );
-            const isDamaged = damagedCheckbox && damagedCheckbox.checked;
-
-            return {
-              logID: logID,
-              equipment: cb.dataset.equipment,
-              damaged: isDamaged,
-            };
-          });
-
-          try {
-            const res = await fetch("/returnMany", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ returns: returnData }),
-            });
-
-            const data = await res.json();
-
-            if (data.success) {
-              // Call success endpoint with returned equipment data
-              const successRes = await fetch("/success", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  issuedEquipment: returnData.map((r) => ({
-                    equipment: r.equipment,
-                    outNum: 1,
-                  })),
-                  name: "<%= student.name %>",
-                  mode: "returned",
-                }),
-              });
-
-              const successHtml = await successRes.text();
-              document.open();
-              document.write(successHtml);
-              document.close();
-            } else {
-              alert("Error: " + data.error);
-            }
-          } catch (err) {
-            alert("Network error: " + err.message);
-          }
-        });
-
-      // Return All functionality
-      document
-        .getElementById("returnAllBtn")
-        ?.addEventListener("click", async () => {
-          if (!confirm("Are you sure you want to return all equipment?")) {
-            return;
-          }
-
-          // Get all checkboxes and their damaged status
-          const allCheckboxes = Array.from(
-            document.querySelectorAll(".equipment-checkbox")
-          );
-
-          const returnData = allCheckboxes.map((cb) => {
-            const logID = parseInt(cb.dataset.logid);
-            const damagedCheckbox = document.querySelector(
-              `.damaged-checkbox[data-logid="${logID}"]`
-            );
-            const isDamaged = damagedCheckbox && damagedCheckbox.checked;
-
-            return {
-              logID: logID,
-              equipment: cb.dataset.equipment,
-              damaged: isDamaged,
-            };
-          });
-
-          try {
-            const res = await fetch("/returnMany", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ returns: returnData }),
-            });
-
-            const data = await res.json();
-
-            if (data.success) {
-              // Call success endpoint with returned equipment data
-              const successRes = await fetch("/success", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  issuedEquipment: returnData.map((r) => ({
-                    equipment: r.equipment,
-                    outNum: 1,
-                  })),
-                  name: "<%= student.name %>",
-                  mode: "returned",
-                }),
-              });
-
-              const successHtml = await successRes.text();
-              document.open();
-              document.write(successHtml);
-              document.close();
-            } else {
-              alert("Error: " + data.error);
-            }
-          } catch (err) {
-            alert("Network error: " + err.message);
-          }
-        });
     </script>
   </body>
 </html>
