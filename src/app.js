@@ -1296,6 +1296,23 @@ app.post("/delete_inventory", (req, res) => {
     }
   );
 });
+app.get("/get_offences", ensureAuthenticated, (req, res) => {
+  db.query(
+    `
+    SELECT studentName, studentEmail, offences
+    FROM Students
+    WHERE offences > 0
+    ORDER BY offences DESC
+    `,
+    (err, results) => {
+      if (err) {
+        console.error("Error fetching offences:", err);
+        return res.status(500).json({ error: "Database error" });
+      }
+      res.json(results);
+    }
+  );
+});
 
 app.get("/team_landing", (req, res) => {
   res.render("team_landing", {
