@@ -1,38 +1,59 @@
 <!DOCTYPE html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style/nav.css" />
+  </head>
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Document</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
-    rel="stylesheet" />
-  <link rel="stylesheet" href="/style/nav.css" />
-</head>
+  <body>
+    <nav>
+      <p>Sports MPH</p>
 
-<body>
-  <nav>
-    <p>Sports MPH</p>
-    <div class="pages">
-      <% if (config && config==="admin" ) { %>
-        <a href="/admin" class="<%= activePage === 'admin' ? 'active' : '' %>">Admin</a>
-        <a href="/statistics" class="<%= activePage === 'statistics' ? 'active' : '' %>">Statistics</a>
+      <div class="pages">
+        <% if (config && config === "admin") { %>
+        <a href="/admin" class="<%= activePage === 'admin' ? 'active' : '' %>"
+          >Admin</a
+        >
+        <a
+          href="/statistics"
+          class="<%= activePage === 'statistics' ? 'active' : '' %>"
+          >Statistics</a
+        >
         <% } %>
-          <a href="/team_landing" class="<%= activePage === 'team-landing' ? 'active' : '' %>">Sports Team Issue</a>
-          <a href="/issue_login" class="<%= activePage === 'issue' ? 'active' : '' %>">Issue</a>
-          <a href="/return_login" class="<%= activePage === 'landing' ? 'active' : '' %>">Return</a>
-          <div section="user-info">
-            <div section="user-icon">
-              <i class="fa-solid fa-user"></i>
-            </div>
-            <div section="user-name">
-              <%= userName %>
-            </div>
-          </div>
-    </div>
-  </nav>
-</body>
 
+        <a
+          href="/team_landing"
+          class="<%= activePage === 'team-landing' ? 'active' : '' %>"
+        >
+          Sports Team Issue
+        </a>
+
+        <a
+          href="/issue_login"
+          class="<%= activePage === 'issue' ? 'active' : '' %>"
+        >
+          Issue
+        </a>
+
+        <a
+          href="/return_login"
+          class="<%= activePage === 'landing' ? 'active' : '' %>"
+        >
+          Return
+        </a>
+        <span class="username"><%= user %></span>
+        <% if (isAuthenticated) { %>
+        <a href="/logout" class="logout-btn">Logout</a>
+        <% } %>
+      </div>
+    </nav>
+  </body>
 </html>

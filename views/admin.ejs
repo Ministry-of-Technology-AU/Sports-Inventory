@@ -1,187 +1,369 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
+  <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Login</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
-        rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/style/global.css" />
     <link rel="stylesheet" href="/style/index.css" />
     <link rel="stylesheet" href="/style/admin.css" />
     <link rel="stylesheet" href="/style/landing.css" />
-    <script src="https://kit.fontawesome.com/2cacd0cbd0.js" crossorigin="anonymous"></script>
-</head>
+    <script
+      src="https://kit.fontawesome.com/2cacd0cbd0.js"
+      crossorigin="anonymous"
+    ></script>
+  </head>
 
-<body>
-    <%- include("nav",{ activePage: "admin" , config:"admin", userName: user }) %>
-        <div class="body-wrapper">
-            <div class="actions-menu">
-                <h1>Actions</h1>
-                <li class="actions-buttons-list">
-                    <span><i class="fa-solid fa-basketball"></i> <button type="button"
-                            class="update-inventory-btn">Update Inventory</button></span>
-                    <span><i class="fa-solid fa-person-circle-check"></i> <button type="button"
-                            class="sports-requests-btn">Create Sports Team
-                            Entry</button></span>
-                    <span><i class="fa-solid fa-triangle-exclamation"></i><button type="button">View
-                            Offences</button></span>
-                    <span><i class="fa-solid fa-square-poll-vertical"></i><a href="/statistics">View
-                            Statistics</a></span>
-                </li>
-            </div>
-            <div class="content-box">
-                <div class="update-inventory-section">
-                    <table border="1" cellpadding="5">
-                        <thead>
-                            <tr>
-                                <th>Equipment</th>
-                                <th>Total Quantity</th>
-                                <th>Reserved for Teams</th>
-                                <th>Damaged</th>
-                                <th>In-use</th>
-                            </tr>
-                        </thead>
-                        <tbody id="inventory-table-body">
-                            <% equipment.forEach(function(item) { %>
-                                <tr>
-                                    <td contenteditable="true">
-                                        <%= item.equipment %>
-                                    </td>
-                                    <td>
-                                        <%= item.totalQuantity %>
-                                    </td>
-                                    <td contenteditable="true">
-                                        <%= item.reservedQuantity %>
-                                    </td>
-                                    <td contenteditable="true">
-                                        <%= item.damagedQuantity %>
-                                    </td>
-                                    <td contenteditable="true">
-                                        <%= item.inUseQuantity %>
-                                    </td>
-                                </tr>
-                                <% }); %>
-                        </tbody>
-
-                    </table>
-                    <button class="add-equipment-btn">Add Equipment</button>
-                    <button class="save-inventory-btn">Save Changes</button>
-                </div>
-                <div class="sports-requests" style="display: none;">
-                    <h2>Request Sports Equipment</h2>
-
-                    <form id="sports-request-form">
-                        <label>Student Name:</label>
-                        <input type="text" id="studentName" required>
-
-                        <label>Student Email:</label>
-                        <input type="email" id="studentEmail" required>
-
-                        <label for="equipment">Equipment:</label>
-                        <select id="equipment" name="equipment" required>
-                            <option value="" disabled selected>Loading...</option>
-                        </select>
-
-
-                        <label>Quantity:</label>
-                        <input type="number" id="quantity" min="1" required>
-
-                        <label>Valid Till:</label>
-                        <input type="date" id="endDate" required>
-
-                        <button type="submit">Submit Request</button>
-                    </form>
-                </div>
-
-            </div>
+  <body>
+    <%- include("nav",{ activePage: "admin" , config:"admin", userName: user })
+    %>
+    <div class="body-wrapper">
+      <div class="actions-menu">
+        <h1>Actions</h1>
+        <li class="actions-buttons-list">
+          <span
+            ><i class="fa-solid fa-basketball"></i>
+            <button type="button" class="update-inventory-btn">
+              Update Inventory
+            </button></span
+          >
+          <span
+            ><i class="fa-solid fa-person-circle-check"></i>
+            <button type="button" class="sports-requests-btn">
+              Create Sports Team Entry
+            </button></span
+          >
+          <span
+            ><i class="fa-solid fa-triangle-exclamation"></i
+            ><button type="button" class="view-offences-btn">
+              View Offences
+            </button>
+          </span>
+          <span
+            ><i class="fa-solid fa-square-poll-vertical"></i
+            ><a href="/statistics">View Statistics</a></span
+          >
+          <span
+            ><i class="fa-solid fa-chain-broken"></i
+            ><button class="damaged-equipment-btn" type="button">
+              View Damaged Equipment
+            </button></span
+          >
+        </li>
+      </div>
+      <div class="content-box">
+        <div class="update-inventory-section">
+          <table border="1" cellpadding="5">
+            <thead>
+              <tr>
+                <th>Equipment</th>
+                <th>Total Quantity</th>
+                <th>Reserved for Teams</th>
+                <th>Damaged</th>
+                <th>In-use</th>
+                <th>Delete</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-table-body">
+              <% equipment.forEach(function(item) { %>
+              <tr data-original-equipment="<%= item.equipment %>">
+                <td contenteditable="true"><%= item.equipment %></td>
+                <td class="total-quantity"><%= item.totalQuantity %></td>
+                <td contenteditable="true"><%= item.reservedQuantity %></td>
+                <td contenteditable="true"><%= item.damagedQuantity %></td>
+                <td contenteditable="true"><%= item.inUseQuantity %></td>
+                <td>
+                  <button
+                    type="button"
+                    class="delete-equipment-btn"
+                    data-equipment="<%= item.equipment %>"
+                  >
+                    <i class="fa-solid fa-trash delete-icon"></i>
+                  </button>
+                </td>
+              </tr>
+              <% }); %>
+            </tbody>
+          </table>
+          <button class="add-equipment-btn">Add Equipment</button>
+          <button class="save-inventory-btn">Save Changes</button>
+        </div>
+        <div class="damaged-equipment-section" style="display: none">
+          <table border="1" cellpadding="5">
+            <thead>
+              <tr>
+                <th>Equipment</th>
+                <th>Quantity</th>
+              </tr>
+            </thead>
+            <tbody id="damaged-inventory-table-body">
+              <% equipment.forEach(function(item) { %> <% if
+              (item.damagedQuantity > 0) { %>
+              <tr>
+                <td contenteditable="true"><%= item.equipment %></td>
+                <td contenteditable="true"><%= item.damagedQuantity %></td>
+              </tr>
+              <% } %> <% }); %>
+            </tbody>
+          </table>
+          <button class="add-equipment-btn">Add Equipment</button>
+          <button class="save-inventory-btn">Save Changes</button>
+        </div>
+        <div class="offences-section" style="display: none">
+          <h2>Student Offences</h2>
+          <table border="1" cellpadding="5">
+            <thead>
+              <tr>
+                <th>Student Name</th>
+                <th>Student Email</th>
+                <th>Offences</th>
+              </tr>
+            </thead>
+            <tbody id="offences-table-body">
+              <tr>
+                <td colspan="3">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
-</body>
+        <div class="sports-requests" style="display: none">
+          <h2>Request Sports Equipment</h2>
 
-<script>
-    document.querySelector('.update-inventory-btn').addEventListener('click', function () {
-        const section_1 = document.querySelector('.sports-requests');
-        section_1.style.display = 'none';
-        const section = document.querySelector('.update-inventory-section');
-        section.style.display = 'block';
-    });
+          <form id="sports-request-form">
+            <label>Student Name:</label>
+            <input type="text" id="studentName" required />
 
-    document.querySelector('.sports-requests-btn').addEventListener('click', function () {
-        const section_1 = document.querySelector('.update-inventory-section');
-        section_1.style.display = 'none';
-        const section = document.querySelector('.sports-requests');
-        section.style.display = 'block';
-    });
-</script>
+            <label>Student Email:</label>
+            <input type="email" id="studentEmail" required />
 
-<!--update inventory script-->
-<script>
-    document.querySelector('.add-equipment-btn').addEventListener('click', function () {
-        const tableBody = document.getElementById('inventory-table-body');
-        const newRow = document.createElement('tr');
+            <label for="equipment">Equipment:</label>
+            <select id="equipment" name="equipment" required>
+              <option value="" disabled selected>Loading...</option>
+            </select>
+
+            <label>Quantity:</label>
+            <input type="number" id="quantity" min="1" required />
+
+            <label>Valid Till:</label>
+            <input type="date" id="endDate" required />
+
+            <button type="submit">Submit Request</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </body>
+
+  <script>
+    document
+      .querySelector(".update-inventory-btn")
+      .addEventListener("click", function () {
+        const section_1 = document.querySelector(".sports-requests");
+        section_1.style.display = "none";
+        const section_2 = document.querySelector(".damaged-equipment-section");
+        section_2.style.display = "none";
+        const section_3 = document.querySelector(".offences-section");
+        section_3.style.display = "none";
+        const section = document.querySelector(".update-inventory-section");
+        section.style.display = "block";
+      });
+
+    document
+      .querySelector(".sports-requests-btn")
+      .addEventListener("click", function () {
+        const section_1 = document.querySelector(".update-inventory-section");
+        section_1.style.display = "none";
+        const section_2 = document.querySelector(".damaged-equipment-section");
+        section_2.style.display = "none";
+        const section_3 = document.querySelector(".offences-section");
+        section_3.style.display = "none";
+        const section = document.querySelector(".sports-requests");
+        section.style.display = "block";
+      });
+    document
+      .querySelector(".damaged-equipment-btn")
+      .addEventListener("click", function () {
+        const section_1 = document.querySelector(".update-inventory-section");
+        section_1.style.display = "none";
+        const section_2 = document.querySelector(".sports-requests");
+        section_2.style.display = "none";
+        const section_3 = document.querySelector(".offences-section");
+        section_3.style.display = "none";
+        const section = document.querySelector(".damaged-equipment-section");
+        section.style.display = "block";
+      });
+    document
+      .querySelector(".view-offences-btn")
+      .addEventListener("click", function () {
+        const section_1 = document.querySelector(".update-inventory-section");
+        section_1.style.display = "none";
+        const section_2 = document.querySelector(".sports-requests");
+        section_2.style.display = "none";
+        const section_3 = document.querySelector(".damaged-equipment-section");
+        section_3.style.display = "none";
+        const section = document.querySelector(".offences-section");
+        section.style.display = "block";
+
+        loadOffences();
+      });
+  </script>
+
+  <!--update inventory script-->
+  <script>
+    document
+      .querySelector(".add-equipment-btn")
+      .addEventListener("click", function () {
+        const tableBody = document.getElementById("inventory-table-body");
+        const newRow = document.createElement("tr");
         newRow.innerHTML = `
-        <td contenteditable="true"></td>
-        <td contenteditable="true">0</td>
-        <td contenteditable="true">0</td>
-        <td contenteditable="true">0</td>
-        <td contenteditable="true">0</td>
-    `;
-        tableBody.appendChild(newRow);
-    });
+                <td contenteditable="true"></td>
+                <td class="total-quantity">0</td>
+                <td contenteditable="true">0</td>
+                <td contenteditable="true">0</td>
+                <td contenteditable="true">0</td>
+                <td>
+                    <button type="button" class="delete-equipment-btn">
+                    <i class="fa-solid fa-trash"></i>
+                    </button>
+                </td>
+                `;
 
-    document.querySelector('.save-inventory-btn').addEventListener('click', function () {
-        const rows = document.querySelectorAll('#inventory-table-body tr');
+        tableBody.appendChild(newRow);
+      });
+
+    document
+      .querySelector(".save-inventory-btn")
+      .addEventListener("click", function () {
+        const rows = document.querySelectorAll(
+          ".update-inventory-section #inventory-table-body tr"
+        );
         const data = [];
 
-        rows.forEach(row => {
-            const cells = row.querySelectorAll('td');
-            data.push({
-                equipment: cells[0].innerText.trim(),
-                totalQuantity: parseInt(cells[1].innerText.trim(), 10),
-                reservedQuantity: parseInt(cells[2].innerText.trim(), 10),
-                damagedQuantity: parseInt(cells[3].innerText.trim(), 10),
-                inUseQuantity: parseInt(cells[4].innerText.trim(), 10)
-            });
+        rows.forEach((row) => {
+          const cells = row.querySelectorAll("td");
 
-            // Remove highlight after saving
-            cells.forEach(cell => cell.style.backgroundColor = '');
+          data.push({
+            equipment: cells[0].innerText.trim(),
+            originalEquipment: row.dataset.originalEquipment || null,
+            reservedQuantity: parseInt(cells[2].innerText.trim(), 10) || 0,
+            damagedQuantity: parseInt(cells[3].innerText.trim(), 10) || 0,
+            inUseQuantity: parseInt(cells[4].innerText.trim(), 10) || 0,
+          });
+
+          // Remove highlight after saving
+          cells.forEach((cell) => (cell.style.backgroundColor = ""));
         });
-        fetch('/update_inventory', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ inventory: data })
+        fetch("/update_inventory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ inventory: data }),
         })
-            .then(res => res.json())
-            .then(msg => {
-                alert(msg.message);
-                location.reload();
-            })
-            .catch(() => alert("Update failed"));
+          .then((res) => res.json())
+          .then((msg) => {
+            alert(msg.message);
+            location.reload();
+          })
+          .catch(() => alert("Update failed"));
+      });
 
+    document.addEventListener("input", function (e) {
+      if (e.target.tagName === "TD" && e.target.isContentEditable) {
+        e.target.style.backgroundColor = "#fff3b0"; // light yellow
+      }
     });
+  </script>
 
-    document.addEventListener('input', function (e) {
-        if (e.target.tagName === 'TD' && e.target.isContentEditable) {
-            e.target.style.backgroundColor = '#fff3b0'; // light yellow
+  <script>
+    // Delegate delete button clicks inside inventory table
+    document
+      .getElementById("inventory-table-body")
+      .addEventListener("click", function (e) {
+        const btn = e.target.closest(".delete-equipment-btn");
+        if (!btn) return;
+
+        const row = btn.closest("tr");
+        const equipmentCell = row.querySelector("td");
+        const equipmentName = equipmentCell
+          ? equipmentCell.innerText.trim()
+          : "";
+
+        // If the row is a new unsaved row without a name, just remove it
+        if (!equipmentName) {
+          if (confirm("Remove this unsaved row?")) row.remove();
+          return;
         }
-    });
-</script>
 
-<!--sports requests script-->
-<script>
-    document.getElementById("sports-request-form").addEventListener("submit", async function (e) {
+        if (
+          !confirm(
+            `Delete equipment "${equipmentName}" from inventory? This will remove the item from the database.`
+          )
+        )
+          return;
+
+        fetch("/delete_inventory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ equipment: equipmentName }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success) {
+              row.remove();
+            } else {
+              alert("Delete failed: " + (data.error || "Unknown error"));
+            }
+          })
+          .catch(() => alert("Network error while deleting equipment"));
+      });
+  </script>
+  <script>
+    function recalculateTotal(row) {
+      const cells = row.querySelectorAll("td");
+
+      const reserved = parseInt(cells[2].innerText.trim(), 10) || 0;
+      const damaged = parseInt(cells[3].innerText.trim(), 10) || 0;
+      const inUse = parseInt(cells[4].innerText.trim(), 10) || 0;
+
+      const total = reserved + damaged + inUse;
+      cells[1].innerText = total;
+    }
+
+    document
+      .getElementById("inventory-table-body")
+      .addEventListener("input", function (e) {
+        const cell = e.target;
+        if (!cell.isContentEditable) return;
+
+        const row = cell.closest("tr");
+        if (!row) return;
+
+        recalculateTotal(row);
+
+        // Highlight edited cells
+        cell.style.backgroundColor = "#fff3b0";
+      });
+  </script>
+
+  <!--sports requests script-->
+  <script>
+    document
+      .getElementById("sports-request-form")
+      .addEventListener("submit", async function (e) {
         e.preventDefault();
 
         const requestData = {
-            studentName: document.getElementById("studentName").value.trim(),
-            studentEmail: document.getElementById("studentEmail").value.trim(),
-            equipment: document.getElementById("equipment").value.trim(),
-            quantity: parseInt(document.getElementById("quantity").value, 10),
-            endDate: document.getElementById("endDate").value
+          studentName: document.getElementById("studentName").value.trim(),
+          studentEmail: document.getElementById("studentEmail").value.trim(),
+          equipment: document.getElementById("equipment").value.trim(),
+          quantity: parseInt(document.getElementById("quantity").value, 10),
+          endDate: document.getElementById("endDate").value,
         };
 
         const today = new Date().toISOString().split("T")[0]; // midnight date
@@ -189,42 +371,97 @@
         requestData.startDate = today; // auto-assign today
 
         fetch("/sports_request", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestData)
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestData),
         })
-            .then(res => res.json())
-            .then(data => alert(data.message))
-            .catch(() => alert("Something went wrong!"));
-    });
-</script>
+          .then((res) => res.json())
+          .then((data) => alert(data.message))
+          .catch(() => alert("Something went wrong!"));
+      });
+  </script>
 
-<script>
+  <script>
     async function loadEquipment() {
-        try {
-            const response = await fetch('/getequipment');
-            const data = await response.json();
-            // Expecting: [{ "equipment": "Cricket Bat" }, { "equipment": "Football" }, ...]
+      try {
+        const response = await fetch("/getequipment");
+        const data = await response.json();
+        console.log("Equipment data received:", data);
 
-            const select = document.getElementById('equipment');
-            select.innerHTML = '<option value="" disabled selected>Select Equipment</option>';
+        const select = document.getElementById("equipment");
+        select.innerHTML =
+          '<option value="" disabled selected>Select Equipment</option>';
 
-            data.forEach(item => {
-                const option = document.createElement('option');
-                option.value = item.equipment;
-                option.textContent = item.equipment;
-                select.appendChild(option);
-            });
-
-        } catch (err) {
-            console.error("Error loading equipment:", err);
-            const select = document.getElementById('equipment');
-            select.innerHTML = '<option value="" disabled selected>Error loading equipment</option>';
+        // Only include equipment that currently has inUseQuantity > 0
+        if (Array.isArray(data) && data.length > 0) {
+          let addedCount = 0;
+          data.forEach((item) => {
+            console.log(
+              `Item: ${item.equipment}, inUseQuantity: ${item.inUseQuantity}`
+            );
+            const inUse = Number(item.inUseQuantity) || 0;
+            if (inUse > 0) {
+              const option = document.createElement("option");
+              option.value = item.equipment;
+              option.textContent = item.equipment + ` (in use: ${inUse})`;
+              select.appendChild(option);
+              addedCount++;
+            }
+          });
+          console.log(`Added ${addedCount} equipment options`);
+          if (addedCount === 0) {
+            select.innerHTML =
+              '<option value="" disabled selected>No equipment in use</option>';
+          }
+        } else {
+          select.innerHTML =
+            '<option value="" disabled selected>No equipment available</option>';
         }
+      } catch (err) {
+        console.error("Error loading equipment:", err);
+        const select = document.getElementById("equipment");
+        select.innerHTML =
+          '<option value="" disabled selected>Error loading equipment</option>';
+      }
     }
 
+    // Load equipment when page loads and when sports request section is shown
     loadEquipment();
-</script>
+    document
+      .querySelector(".sports-requests-btn")
+      .addEventListener("click", function () {
+        loadEquipment();
+      });
+  </script>
+  <script>
+    async function loadOffences() {
+      const tbody = document.getElementById("offences-table-body");
+      tbody.innerHTML = "<tr><td colspan='3'>Loading...</td></tr>";
 
+      try {
+        const res = await fetch("/get_offences");
+        const data = await res.json();
 
+        if (!data.length) {
+          tbody.innerHTML = "<tr><td colspan='3'>No offences found</td></tr>";
+          return;
+        }
+
+        tbody.innerHTML = "";
+        data.forEach((student) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+          <td>${student.studentName}</td>
+          <td>${student.studentEmail}</td>
+          <td>${student.offences}</td>
+        `;
+          tbody.appendChild(row);
+        });
+      } catch (err) {
+        console.error("Error loading offences:", err);
+        tbody.innerHTML =
+          "<tr><td colspan='3'>Failed to load offences</td></tr>";
+      }
+    }
+  </script>
 </html>
