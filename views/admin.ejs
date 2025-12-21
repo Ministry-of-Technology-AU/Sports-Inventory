@@ -72,7 +72,7 @@
             </thead>
             <tbody id="inventory-table-body">
               <% equipment.forEach(function(item) { %>
-              <tr>
+              <tr data-original-equipment="<%= item.equipment %>">
                 <td contenteditable="true"><%= item.equipment %></td>
                 <td class="total-quantity"><%= item.totalQuantity %></td>
                 <td contenteditable="true"><%= item.reservedQuantity %></td>
@@ -102,7 +102,7 @@
                 <th>Quantity</th>
               </tr>
             </thead>
-            <tbody id="inventory-table-body">
+            <tbody id="damaged-inventory-table-body">
               <% equipment.forEach(function(item) { %> <% if
               (item.damagedQuantity > 0) { %>
               <tr>
@@ -241,7 +241,9 @@
     document
       .querySelector(".save-inventory-btn")
       .addEventListener("click", function () {
-        const rows = document.querySelectorAll("#inventory-table-body tr");
+        const rows = document.querySelectorAll(
+          ".update-inventory-section #inventory-table-body tr"
+        );
         const data = [];
 
         rows.forEach((row) => {
@@ -249,6 +251,7 @@
 
           data.push({
             equipment: cells[0].innerText.trim(),
+            originalEquipment: row.dataset.originalEquipment || null,
             reservedQuantity: parseInt(cells[2].innerText.trim(), 10) || 0,
             damagedQuantity: parseInt(cells[3].innerText.trim(), 10) || 0,
             inUseQuantity: parseInt(cells[4].innerText.trim(), 10) || 0,
@@ -383,18 +386,37 @@
       try {
         const response = await fetch("/getequipment");
         const data = await response.json();
-        // Expecting: [{ "equipment": "Cricket Bat" }, { "equipment": "Football" }, ...]
+        console.log("Equipment data received:", data);
 
         const select = document.getElementById("equipment");
         select.innerHTML =
           '<option value="" disabled selected>Select Equipment</option>';
 
-        data.forEach((item) => {
-          const option = document.createElement("option");
-          option.value = item.equipment;
-          option.textContent = item.equipment;
-          select.appendChild(option);
-        });
+        // Only include equipment that currently has inUseQuantity > 0
+        if (Array.isArray(data) && data.length > 0) {
+          let addedCount = 0;
+          data.forEach((item) => {
+            console.log(
+              `Item: ${item.equipment}, inUseQuantity: ${item.inUseQuantity}`
+            );
+            const inUse = Number(item.inUseQuantity) || 0;
+            if (inUse > 0) {
+              const option = document.createElement("option");
+              option.value = item.equipment;
+              option.textContent = item.equipment + ` (in use: ${inUse})`;
+              select.appendChild(option);
+              addedCount++;
+            }
+          });
+          console.log(`Added ${addedCount} equipment options`);
+          if (addedCount === 0) {
+            select.innerHTML =
+              '<option value="" disabled selected>No equipment in use</option>';
+          }
+        } else {
+          select.innerHTML =
+            '<option value="" disabled selected>No equipment available</option>';
+        }
       } catch (err) {
         console.error("Error loading equipment:", err);
         const select = document.getElementById("equipment");
@@ -403,7 +425,13 @@
       }
     }
 
+    // Load equipment when page loads and when sports request section is shown
     loadEquipment();
+    document
+      .querySelector(".sports-requests-btn")
+      .addEventListener("click", function () {
+        loadEquipment();
+      });
   </script>
   <script>
     async function loadOffences() {

@@ -16,6 +16,7 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Load environment variables
 dotenv.config({ path: path.join(__dirname, "../.env") });
 
 // Serve static files from "style" folder
@@ -24,7 +25,51 @@ app.use("/images", express.static(path.join(__dirname, "../images")));
 
 const port = process.env.PORT || 3000;
 
-import db, { pool } from "./db.js";
+// Database connection
+import { createPool } from "mysql2/promise";
+const pool = createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+// Wrapper to support both callback-based and promise-based queries
+const db = {
+  query: (sql, argsOrCallback, callback) => {
+    let args = [];
+    let cb = null;
+
+    // Detect calling pattern
+    if (typeof argsOrCallback === "function") {
+      // Pattern: db.query(sql, callback)
+      args = [];
+      cb = argsOrCallback;
+    } else if (typeof callback === "function") {
+      // Pattern: db.query(sql, args, callback)
+      args = argsOrCallback || [];
+      cb = callback;
+    } else {
+      // Pattern: db.query(sql, args) - expecting a promise
+      args = argsOrCallback || [];
+    }
+
+    const promise = pool.query(sql, args).then(([results]) => results);
+
+    if (cb) {
+      // Callback-based: handle with callback
+      promise
+        .then((results) => cb(null, results))
+        .catch((err) => cb(err, null));
+    } else {
+      // Promise-based: return promise for await
+      return promise;
+    }
+  },
+};
 
 app.set("view engine", "ejs");
 
@@ -1026,17 +1071,16 @@ app.post("/landing", async (req, res) => {
   );
 });
 
-app.post("/getequipment", (req, res) => {
-  db.query("SELECT equipment FROM Equipment", (err, rows) => {
+// Return equipment rows including inUseQuantity so clients can filter
+app.get("/getequipment", (req, res) => {
+  db.query("SELECT equipment, inUseQuantity FROM Equipment", (err, rows) => {
     if (err) {
-      console.error("Database error:", err);
-      return res.status(500).json({ error: "Database error" });
+      console.error("Database error fetching equipment:", err);
+      return res.status(500).json([]);
     }
 
-    const equipmentList = rows.map((row) => row.equipment);
-    console.log("Equipment List:", equipmentList);
-
-    res.json({ equipment: equipmentList });
+    // rows is an array of { equipment, inUseQuantity }
+    res.json(rows);
   });
 });
 
@@ -1191,10 +1235,34 @@ app.post("/sports_request", (req, res) => {
         });
       }
 
-      return res.status(201).json({
-        success: true,
-        message: "Sports request submitted successfully",
-        requestId: result.insertId,
+      // After inserting the sports request, update Equipment counts:
+      // subtract approved quantity from inUseQuantity and add to reservedQuantity
+      const updQuery = `
+        UPDATE Equipment
+        SET inUseQuantity = GREATEST(inUseQuantity - ?, 0),
+            reservedQuantity = reservedQuantity + ?
+        WHERE equipment = ?
+      `;
+
+      db.query(updQuery, [quantity, quantity, equipment], (updErr, updRes) => {
+        if (updErr) {
+          console.error(
+            "Error updating Equipment after sports request:",
+            updErr
+          );
+          return res.status(500).json({
+            success: false,
+            error:
+              "Request saved but failed to update inventory: " + updErr.message,
+            requestId: result.insertId,
+          });
+        }
+
+        return res.status(201).json({
+          success: true,
+          message: "Sports request submitted successfully",
+          requestId: result.insertId,
+        });
       });
     }
   );
@@ -1223,33 +1291,97 @@ app.post("/update_inventory", (req, res) => {
   let completed = 0;
 
   inventory.forEach((item) => {
-    db.query(
-      `INSERT INTO Equipment (equipment, totalQuantity, reservedQuantity, damagedQuantity, inUseQuantity)
-       VALUES (?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE
-         totalQuantity = VALUES(totalQuantity),
-         reservedQuantity = VALUES(reservedQuantity),
-         damagedQuantity = VALUES(damagedQuantity),
-         inUseQuantity = VALUES(inUseQuantity)`,
-      [
-        item.equipment,
-        item.totalQuantity,
-        item.reservedQuantity,
-        item.damagedQuantity,
-        item.inUseQuantity,
-      ],
-      (err) => {
-        if (err) {
-          console.error(err);
-          return res.status(500).json({ error: "Database update failed." });
-        }
+    // If originalEquipment is provided and different, attempt a targeted UPDATE (handles renames)
+    if (item.originalEquipment && item.originalEquipment !== item.equipment) {
+      db.query(
+        `UPDATE Equipment SET
+           equipment = ?,
+           totalQuantity = ?,
+           reservedQuantity = ?,
+           damagedQuantity = ?,
+           inUseQuantity = ?
+         WHERE equipment = ?`,
+        [
+          item.equipment,
+          item.totalQuantity,
+          item.reservedQuantity,
+          item.damagedQuantity,
+          item.inUseQuantity,
+          item.originalEquipment,
+        ],
+        (err, result) => {
+          if (err) {
+            console.error("Update error:", err);
+            return res.status(500).json({ error: "Database update failed." });
+          }
 
-        completed++;
-        if (completed === inventory.length) {
-          return res.json({ message: "Inventory updated successfully" });
+          // If no rows were affected, fall back to insert (new equipment)
+          if (result.affectedRows === 0) {
+            db.query(
+              `INSERT INTO Equipment (equipment, totalQuantity, reservedQuantity, damagedQuantity, inUseQuantity)
+               VALUES (?, ?, ?, ?, ?)`,
+              [
+                item.equipment,
+                item.totalQuantity,
+                item.reservedQuantity,
+                item.damagedQuantity,
+                item.inUseQuantity,
+              ],
+              (insErr) => {
+                if (insErr) {
+                  console.error("Insert fallback error:", insErr);
+                  return res
+                    .status(500)
+                    .json({ error: "Database insert failed." });
+                }
+
+                completed++;
+                if (completed === inventory.length) {
+                  return res.json({
+                    message: "Inventory updated successfully",
+                  });
+                }
+              }
+            );
+            return;
+          }
+
+          completed++;
+          if (completed === inventory.length) {
+            return res.json({ message: "Inventory updated successfully" });
+          }
         }
-      }
-    );
+      );
+    } else {
+      // No rename: insert or update by unique key
+      db.query(
+        `INSERT INTO Equipment (equipment, totalQuantity, reservedQuantity, damagedQuantity, inUseQuantity)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           totalQuantity = VALUES(totalQuantity),
+           reservedQuantity = VALUES(reservedQuantity),
+           damagedQuantity = VALUES(damagedQuantity),
+           inUseQuantity = VALUES(inUseQuantity)`,
+        [
+          item.equipment,
+          item.totalQuantity,
+          item.reservedQuantity,
+          item.damagedQuantity,
+          item.inUseQuantity,
+        ],
+        (err) => {
+          if (err) {
+            console.error(err);
+            return res.status(500).json({ error: "Database update failed." });
+          }
+
+          completed++;
+          if (completed === inventory.length) {
+            return res.json({ message: "Inventory updated successfully" });
+          }
+        }
+      );
+    }
   });
 });
 
