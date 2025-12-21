@@ -327,17 +327,17 @@ setTimeout(() => {
 // END OVERDUE TRACKING
 // ========================================================
 
-const publicPaths = ["/auth/google", "/auth/google/callback", "/unauthorized"];
-
 app.use(
   session({
-    key: "mailroom_sid",
+    name: "mailroom_sid",
     secret: process.env.SECRET_KEY || "your_session_secret",
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
     cookie: {
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     },
   })
 );
@@ -349,8 +349,12 @@ app.use(passport.session());
 app.use((req, res, next) => {
   // Public paths don't need any authentication
   if (
-    (publicPaths && publicPaths.includes(req.path)) ||
-    req.path.startsWith("/auth/")
+    req.path.startsWith("/auth") ||
+    req.path === "/" ||
+    req.path === "/issue_login" ||
+    req.path === "/return_login" ||
+    req.path === "/logout" ||
+    req.path === "/unauthorized"
   ) {
     return next();
   }
@@ -402,7 +406,23 @@ const students = JSON.parse(
 
 app.get(
   "/auth/google",
-  passport.authenticate("google", { scope: ["profile", "email"] })
+  (req, res, next) => {
+    const returnTo = req.session.returnTo; // save it
+
+    req.session.regenerate((err) => {
+      if (err) return next(err);
+
+      if (returnTo) {
+        req.session.returnTo = returnTo; // restore it
+      }
+
+      next();
+    });
+  },
+  passport.authenticate("google", {
+    scope: ["profile", "email"],
+    prompt: "select_account",
+  })
 );
 
 app.get(
@@ -423,16 +443,12 @@ app.get(
 );
 
 app.get("/logout", (req, res, next) => {
-  req.logout(function (err) {
-    if (err) {
-      return next(err);
-    }
-    req.session.destroy((err) => {
-      if (err) {
-        console.error("Error destroying session:", err);
-      }
-      res.clearCookie("connect.sid");
-      res.redirect("/");
+  req.logout((err) => {
+    if (err) return next(err);
+
+    req.session.regenerate(() => {
+      res.clearCookie("mailroom_sid");
+      res.redirect("/auth/google");
     });
   });
 });
@@ -449,13 +465,18 @@ app.get("/", (req, res) => {
   res.render("issue_login", {
     activePage: "issue",
     user: req.user?.name || "Guest",
+    isAuthenticated: req.isAuthenticated(),
   });
 });
 
 app.get("/issue_login", (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.redirect("/auth/google");
+  }
   res.render("issue_login", {
     activePage: "issue",
-    user: req.user?.name || "Guest",
+    user: req.user.name,
+    isAuthenticated: true,
   });
 });
 
@@ -604,6 +625,7 @@ app.get("/issue_team", (req, res) => {
                 errorMsg:
                   "No valid sports equipment request found for your account. Please use the regular issue portal.",
                 user: req.user?.name || "Guest",
+                isAuthenticated: req.isAuthenticated(),
               });
             }
 
@@ -620,6 +642,7 @@ app.get("/issue_team", (req, res) => {
               equipment: equipment,
               activePage: "issue",
               user: req.user?.name || "Guest",
+              isAuthenticated: req.isAuthenticated(),
             });
           }
         );
@@ -657,6 +680,7 @@ app.get("/issue", (req, res) => {
         availableItems: availableItems,
         activePage: "issue",
         user: req.user?.name || "Guest",
+        isAuthenticated: req.isAuthenticated(),
       });
     }
   );
@@ -810,6 +834,7 @@ app.post("/issue", (req, res) => {
                       studentName: req.session.student.name,
                       equipment: issuedEquipment,
                       user: req.user?.name || "Guest",
+                      isAuthenticated: req.isAuthenticated(),
                       mode: "issued",
                     });
                   }
@@ -926,6 +951,7 @@ app.get("/return_login", (req, res) => {
   res.render("return_login", {
     activePage: "landing",
     user: req.user?.name || "Guest",
+    isAuthenticated: req.isAuthenticated(),
   });
 });
 
@@ -949,6 +975,7 @@ app.get("/landing", (req, res) => {
     ashokaId: req.session.student.AshokaId,
     activePage: "landing",
     user: req.user?.name || "Guest",
+    isAuthenticated: req.isAuthenticated(),
   });
 });
 
@@ -993,6 +1020,7 @@ app.post("/landing", async (req, res) => {
         student: studentData,
         equipment: results,
         user: req.user?.name || "Guest",
+        isAuthenticated: req.isAuthenticated(),
       });
     }
   );
@@ -1273,10 +1301,11 @@ app.get("/team_landing", (req, res) => {
   res.render("team_landing", {
     activePage: "team-landing",
     user: req.user?.name || "Guest",
+    isAuthenticated: req.isAuthenticated(),
   });
 });
 
-app.get("/admin", (req, res) => {
+app.get("/admin", ensureAuthenticated, (req, res) => {
   db.query("SELECT * FROM Equipment", (err, results) => {
     if (err) {
       console.error("Database error:", err);
@@ -1296,15 +1325,17 @@ app.get("/admin", (req, res) => {
     res.render("admin", {
       activePage: "admin",
       user: req.user?.name || "Guest",
+      isAuthenticated: req.isAuthenticated(),
       equipment: equipmentData,
     });
   });
 });
 
-app.get("/statistics", (req, res) => {
+app.get("/statistics", ensureAuthenticated, (req, res) => {
   res.render("dashboard", {
     activePage: "statistics",
     user: req.user?.name || "Guest",
+    isAuthenticated: req.isAuthenticated(),
   });
 });
 
@@ -1333,6 +1364,7 @@ app.post("/success", (req, res) => {
 
   res.render("success", {
     user: req.user?.name || "Guest",
+    isAuthenticated: req.isAuthenticated(),
     studentName: req.body.name || "Unknown",
     mode: req.body.mode || "processed",
     equipment: groupedArray,

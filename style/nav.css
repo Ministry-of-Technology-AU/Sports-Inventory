@@ -45,6 +45,29 @@ nav p {
   background: var(--primary-color);
   box-shadow: 0 4px 8px rgba(196, 18, 47, 0.3);
 }
+.username {
+  color: var(--text-color-secondary);
+  text-decoration: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.logout-btn {
+  padding: 6px 12px;
+  background: #e74c3c;
+  color: white;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.logout-btn:hover {
+  background: #c0392b;
+}
 
 @media (max-width: 768px) {
   nav {
