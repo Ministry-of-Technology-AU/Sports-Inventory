@@ -44,13 +44,7 @@ and
 Start the app
 
 ```bash
-  nodemon src/app4.js
-```
-
-or 
-
-```bash
-  npm run dev 
+  nodemon src/app.js
 ```
 
 
