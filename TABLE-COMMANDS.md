@@ -54,6 +54,7 @@ CREATE TABLE Logs (
     returnedByID VARCHAR(50) NULL,
     returnedByEmail VARCHAR(100) NULL,
     damaged ENUM('Yes', 'No') DEFAULT 'No',
+    isTeamIssue BOOLEAN NOT NULL DEFAULT FALSE;
     
     CONSTRAINT fk_logs_equipment FOREIGN KEY (equipmentBorrowed)
         REFERENCES Equipment(equipment),
