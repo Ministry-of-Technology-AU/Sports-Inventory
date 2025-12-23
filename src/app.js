@@ -432,6 +432,21 @@ app.use((req, res, next) => {
   // Default: redirect to issue login
   res.redirect("/issue_login");
 });
+function requireStudent(req, res, next) {
+  if (req.session.student) {
+    return next();
+  }
+
+  // Return-side pages
+  const returnPages = ["/landing", "/team_return"];
+
+  if (returnPages.includes(req.path)) {
+    return res.redirect("/return_login");
+  }
+
+  // Issue-side pages
+  return res.redirect("/issue_login");
+}
 
 function ensureAuthenticated(req, res, next) {
   if (req.isAuthenticated()) {
@@ -622,7 +637,7 @@ function getInUseEquipment(callback) {
 }
 
 // Sports team issue endpoint
-app.get("/issue_team", (req, res) => {
+app.get("/issue_team", requireStudent, (req, res) => {
   getInUseEquipment((err, totalItems) => {
     if (err) {
       return res.status(500).send("Error calculating in use equipment");
@@ -685,7 +700,7 @@ app.get("/issue_team", (req, res) => {
             res.render("team_issue", {
               student: req.session.student,
               equipment: equipment,
-              activePage: "issue",
+              activePage: "team-landing",
               user: req.user?.name || "Guest",
               isAuthenticated: req.isAuthenticated(),
             });
@@ -694,6 +709,124 @@ app.get("/issue_team", (req, res) => {
       }
     );
   });
+});
+
+app.get("/team_return", requireStudent, async (req, res) => {
+  const student = req.session.student;
+
+  try {
+    const rows = await db.query(
+      `
+      SELECT
+        equipmentBorrowed AS equipment,
+        COUNT(*) AS outNum,
+        MIN(timestamp) AS outTime
+      FROM Logs
+      WHERE studentID = ?
+        AND isTeamIssue = TRUE
+        AND pending = TRUE
+        AND returned = FALSE
+      GROUP BY equipmentBorrowed
+      `,
+      [student.AshokaId]
+    );
+
+    const equipment = rows.map((row) => ({
+      equipment: row.equipment,
+      outNum: row.outNum,
+      outTime: moment(row.outTime)
+        .tz("Asia/Kolkata")
+        .format("ddd DD-MM-YYYY HH:mm:ss"),
+    }));
+
+    res.render("team_return", {
+      student,
+      equipment,
+      activePage: "team-return",
+      user: req.user?.name || "Guest",
+      isAuthenticated: req.isAuthenticated(),
+    });
+  } catch (err) {
+    console.error("Error loading team return page:", err);
+    res.status(500).send("Failed to load team return page");
+  }
+});
+
+app.post("/return_team_equipment", requireStudent, async (req, res) => {
+  const { equipments } = req.body;
+  const studentId = req.session.student.AshokaId;
+  const returnTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
+
+  if (!equipments || equipments.length === 0) {
+    return res.json({ success: false, error: "No equipment provided" });
+  }
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+    const returnedCounts = {};
+
+    for (const item of equipments) {
+      const { equipment, outNum } = item;
+      returnedCounts[equipment] = (returnedCounts[equipment] || 0) + outNum;
+
+      // Fetch matching TEAM logs
+      const [logs] = await connection.query(
+        `SELECT logID
+         FROM Logs
+         WHERE studentID = ?
+           AND equipmentBorrowed = ?
+           AND isTeamIssue = TRUE
+           AND pending = TRUE
+           AND returned = FALSE
+         LIMIT ?`,
+        [studentId, equipment, outNum]
+      );
+
+      if (logs.length < outNum) {
+        throw new Error(`Not enough team-issued ${equipment} found to return`);
+      }
+
+      // Mark each log as returned
+      for (const log of logs) {
+        await connection.query(
+          `UPDATE Logs
+           SET pending = FALSE,
+               returned = TRUE,
+               returnedTimestamp = ?
+           WHERE logID = ?`,
+          [returnTime, log.logID]
+        );
+      }
+    }
+    for (const [equipment, qty] of Object.entries(returnedCounts)) {
+      const [result] = await connection.query(
+        `
+    UPDATE Equipment
+    SET reservedQuantity = GREATEST(reservedQuantity - ?, 0),
+        inUseQuantity = inUseQuantity + ?
+    WHERE equipment = ?
+    `,
+        [qty, qty, equipment]
+      );
+
+      if (result.affectedRows === 0) {
+        throw new Error(
+          `Equipment "${equipment}" not found while updating inventory`
+        );
+      }
+    }
+
+    await connection.commit();
+    res.json({ success: true });
+  } catch (err) {
+    await connection.rollback();
+    console.error("Team return error:", err);
+    res.json({ success: false, error: err.message });
+  } finally {
+    connection.release();
+  }
 });
 
 // Regular issue endpoint - GET
@@ -893,103 +1026,96 @@ app.post("/issue", (req, res) => {
   );
 });
 
-app.post("/issue_team_equipment", (req, res) => {
+app.post("/issue_team_equipment", requireStudent, async (req, res) => {
   const selectedEquipments = req.body.equipments;
-  const studentName = req.session.student.name;
-  const currentDate = new Date().toISOString().split("T")[0];
+  const student = req.session.student;
 
   if (!selectedEquipments || selectedEquipments.length === 0) {
     return res.json({ success: false, error: "No equipment selected" });
   }
 
-  // get the email by querying the Students table on AshokaId
-  db.query(
-    "SELECT studentEmail FROM Students WHERE studentID = ?",
-    [req.session.student.AshokaId],
-    (emailErr, emailResults) => {
-      if (emailErr || emailResults.length === 0) {
-        console.error("Error fetching student email:", emailErr);
-        return res.status(500).send("Could not find student email");
-      }
+  const currentTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
+  const dueDate = moment()
+    .tz("Asia/Kolkata")
+    .add(7, "days")
+    .format("YYYY-MM-DD HH:mm:ss");
 
-      const studentEmail = emailResults[0].studentEmail;
+  try {
+    // Fetch student email
+    const emailRows = await db.query(
+      "SELECT studentEmail FROM Students WHERE studentID = ?",
+      [student.AshokaId]
+    );
 
-      // Create placeholders for the IN clause
-      const placeholders = selectedEquipments.map(() => "?").join(",");
+    if (emailRows.length === 0) {
+      return res
+        .status(500)
+        .json({ success: false, error: "Student email not found" });
+    }
 
-      console.log(
-        "Querying issue with the following info: ",
-        studentEmail,
-        studentName,
-        selectedEquipments,
-        currentDate
-      );
+    const studentEmail = emailRows[0].studentEmail;
 
-      // First, get the equipment details before updating
-      db.query(
-        `SELECT equipment, quantity FROM SportsRequests 
-         WHERE studentEmail = ? 
-         AND studentName = ? 
+    // Fetch approved sports requests
+    const placeholders = selectedEquipments.map(() => "?").join(",");
+
+    const requests = await db.query(
+      `SELECT equipment, quantity
+       FROM SportsRequests
+       WHERE studentEmail = ?
+         AND studentName = ?
          AND equipment IN (${placeholders})
-         AND startDate <= ? 
-         AND endDate >= ? 
          AND (issued IS NULL OR issued = FALSE)`,
-        [
-          studentEmail,
-          studentName,
-          ...selectedEquipments,
-          currentDate,
-          currentDate,
-        ],
-        (err, equipmentResults) => {
-          if (err) {
-            console.error("Database error:", err);
-            return res.json({ success: false, error: "Database error" });
-          }
+      [studentEmail, student.name, ...selectedEquipments]
+    );
 
-          if (equipmentResults.length === 0) {
-            return res.json({
-              success: false,
-              error: "No valid requests found to issue",
-            });
-          }
+    if (requests.length === 0) {
+      return res.json({ success: false, error: "No valid requests found" });
+    }
 
-          // Store equipment in session for success page
-          req.session.issuedEquipment = equipmentResults.map((item) => ({
-            equipment: item.equipment,
-            outNum: item.quantity,
-          }));
-
-          // Update issued status for selected equipment
-          db.query(
-            `UPDATE SportsRequests 
-             SET issued = TRUE 
-             WHERE studentEmail = ? 
-             AND studentName = ? 
-             AND equipment IN (${placeholders})
-             AND startDate <= ? 
-             AND endDate >= ? 
-             AND (issued IS NULL OR issued = FALSE)`,
-            [
+    // Insert into Logs item-wise (same as normal issue)
+    for (const reqItem of requests) {
+      for (let i = 0; i < reqItem.quantity; i++) {
+        await db.query(
+          `INSERT INTO Logs (
+              timestamp,
+              equipmentBorrowed,
+              studentID,
               studentEmail,
               studentName,
-              ...selectedEquipments,
-              currentDate,
-              currentDate,
-            ],
-            (err, results) => {
-              if (err) {
-                console.error("Database error:", err);
-                return res.json({ success: false, error: "Database error" });
-              }
-
-              res.json({ success: true });
-            }
-          );
-        }
-      );
+              dueOn,
+              pending,
+              returned,
+              isTeamIssue
+            ) VALUES (?, ?, ?, ?, ?, ?, TRUE, FALSE, TRUE)
+            `,
+          [
+            currentTime,
+            reqItem.equipment,
+            student.AshokaId,
+            studentEmail,
+            student.name,
+            dueDate,
+          ]
+        );
+      }
     }
-  );
+
+    // Mark sports requests as issued
+    await db.query(
+      `UPDATE SportsRequests
+       SET issued = TRUE
+       WHERE studentEmail = ?
+         AND studentName = ?
+         AND equipment IN (${placeholders})
+         AND (issued IS NULL OR issued = FALSE)`,
+      [studentEmail, student.name, ...selectedEquipments]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Team issue error:", err);
+    res.status(500).json({ success: false, error: "Team issue failed" });
+  }
 });
 
 app.get("/return_login", (req, res) => {
@@ -1047,7 +1173,7 @@ app.post("/landing", async (req, res) => {
       returned,
       returnedTimestamp as inTime
     FROM Logs 
-    WHERE studentID = ? AND pending = TRUE AND returned = FALSE`,
+    WHERE studentID = ? AND pending = TRUE AND returned = FALSE AND isTeamIssue = FALSE`,
     [ashokaId],
     (err, results) => {
       if (err) return res.status(500).send("Database error");
@@ -1111,11 +1237,20 @@ app.post("/returnMany", async (req, res) => {
 
       // Ensure log is valid and pending
       const [logRows] = await connection.query(
-        `SELECT logID FROM Logs
-         WHERE logID = ? AND studentID = ? AND pending = TRUE AND returned = FALSE`,
+        `SELECT logID, isTeamIssue FROM Logs
+          WHERE logID = ?
+            AND studentID = ?
+            AND pending = TRUE
+            AND returned = FALSE`,
         [logID, studentId]
       );
-
+      if (logRows[0].isTeamIssue) {
+        await connection.rollback();
+        return res.json({
+          success: false,
+          error: "Team-issued equipment cannot be returned via this route",
+        });
+      }
       if (logRows.length === 0) {
         await connection.rollback();
         return res.json({
