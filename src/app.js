@@ -393,11 +393,15 @@ app.use(passport.session());
 // Global authentication middleware
 app.use((req, res, next) => {
   // Public paths don't need any authentication
+  // Public paths don't need any authentication
   if (
     req.path.startsWith("/auth") ||
     req.path === "/" ||
     req.path === "/issue_login" ||
     req.path === "/return_login" ||
+    req.path === "/issue_team_login" ||
+    req.path === "/team_return_login" ||
+    req.path === "/team_return" ||
     req.path === "/logout" ||
     req.path === "/unauthorized"
   ) {
@@ -424,8 +428,22 @@ app.use((req, res, next) => {
     return res.redirect("/return_login");
   }
 
-  // For POST routes and other paths, allow if either auth method is present
-  if (req.session.student || req.isAuthenticated()) {
+  // HARD BLOCK: team issue / return must use QR ONLY
+  const qrOnlyPaths = [
+    "/issue_team",
+    "/team_return",
+    "/issue_team_equipment",
+    "/return_team_equipment",
+  ];
+
+  if (qrOnlyPaths.includes(req.path)) {
+    if (!req.session.student) {
+      return res.redirect(
+        req.path.startsWith("/team_return")
+          ? "/team_return_login"
+          : "/issue_team_login"
+      );
+    }
     return next();
   }
 
@@ -438,7 +456,7 @@ function requireStudent(req, res, next) {
   }
 
   // Return-side pages
-  const returnPages = ["/landing", "/team_return"];
+  const returnPages = ["/landing"];
 
   if (returnPages.includes(req.path)) {
     return res.redirect("/return_login");
@@ -554,31 +572,26 @@ app.post("/issue_login", (req, res) => {
 
 app.post("/issue_login_sports", (req, res) => {
   const ashokaId = req.body.qrString?.trim();
-  // In the Students table, check under the column sportsTeamAuthorised
-  // If yes, redirected to endpoint /issue_login
-  // Else, render error page with message "not sports team authorised"
+
   db.query(
     "SELECT sportsTeamAuthorised FROM Students WHERE studentID = ?",
     [ashokaId],
     (err, results) => {
-      if (err) {
-        console.error("Database error:", err);
-        return res.status(500).send("Database error");
-      }
-
-      if (results.length === 0) {
+      if (err) return res.status(500).send("Database error");
+      if (results.length === 0)
         return res.status(404).send("Student not found");
-      }
 
-      const isAuthorised = results[0].sportsTeamAuthorised;
-
-      if (isAuthorised) {
-        res.redirect("/issue_login");
-      } else {
-        res.render("error", {
+      if (!results[0].sportsTeamAuthorised) {
+        return res.render("error", {
           msg: "Unauthorized: You are not authorised as a sports team member.",
         });
       }
+
+      req.session.student = { AshokaId: ashokaId };
+
+      req.session.save(() => {
+        res.redirect("/issue_team");
+      });
     }
   );
 });
@@ -635,83 +648,115 @@ function getInUseEquipment(callback) {
     callback(null, inUseItems);
   });
 }
+// ================= TEAM ISSUE QR LOGIN =================
+app.get("/issue_team_login", (req, res) => {
+  req.session.student = null; // FORCE fresh QR
+  res.render("issue_login", {
+    activePage: "team-landing",
+    user: "Guest",
+    isAuthenticated: req.isAuthenticated(),
+  });
+});
 
 // Sports team issue endpoint
-app.get("/issue_team", requireStudent, (req, res) => {
-  getInUseEquipment((err, totalItems) => {
-    if (err) {
-      return res.status(500).send("Error calculating in use equipment");
+app.get(
+  "/issue_team",
+  (req, res, next) => {
+    if (!req.session.student) {
+      return res.redirect("/issue_team_login");
     }
+    next();
+  },
+  (req, res) => {
+    getInUseEquipment((err, totalItems) => {
+      if (err) {
+        return res.status(500).send("Error calculating in use equipment");
+      }
 
-    // get the email by querying the Students table on AshokaId
-    db.query(
-      "SELECT studentEmail FROM Students WHERE studentID = ?",
-      [req.session.student.AshokaId],
-      (emailErr, emailResults) => {
-        if (emailErr || emailResults.length === 0) {
-          console.error("Error fetching student email:", emailErr);
-          return res.status(500).send("Could not find student email");
-        }
+      // get the email by querying the Students table on AshokaId
+      db.query(
+        "SELECT studentEmail FROM Students WHERE studentID = ?",
+        [req.session.student.AshokaId],
+        (emailErr, emailResults) => {
+          if (emailErr || emailResults.length === 0) {
+            console.error("Error fetching student email:", emailErr);
+            return res.status(500).send("Could not find student email");
+          }
 
-        const studentEmail = emailResults[0].studentEmail;
-        const studentName = req.session.student.name;
-        const currentDate = new Date().toISOString().split("T")[0];
+          const studentEmail = emailResults[0].studentEmail;
+          const studentName = req.session.student.name;
+          const currentDate = new Date().toISOString().split("T")[0];
 
-        console.log(
-          "Querying with information: ",
-          studentEmail,
-          studentName,
-          currentDate
-        );
+          console.log(
+            "Querying with information: ",
+            studentEmail,
+            studentName,
+            currentDate
+          );
 
-        // Check for valid sports request
-        db.query(
-          `SELECT equipment, quantity, startDate, endDate, approvedOn 
+          // Check for valid sports request
+          db.query(
+            `SELECT equipment, quantity, startDate, endDate, approvedOn 
            FROM SportsRequests 
            WHERE studentEmail = ? 
            AND studentName = ? 
            AND startDate <= ? 
            AND endDate >= ? 
            AND (issued IS NULL OR issued = FALSE)`,
-          [studentEmail, studentName, currentDate, currentDate],
-          (err, results) => {
-            if (err) {
-              console.error("Database error:", err);
-              return res.status(500).send("Database error");
-            }
+            [studentEmail, studentName, currentDate, currentDate],
+            (err, results) => {
+              if (err) {
+                console.error("Database error:", err);
+                return res.status(500).send("Database error");
+              }
 
-            if (results.length === 0) {
-              return res.render("error", {
-                errorMsg:
-                  "No valid sports equipment request found for your account. Please use the regular issue portal.",
+              if (results.length === 0) {
+                return res.render("error", {
+                  errorMsg:
+                    "No valid sports equipment request found for your account. Please use the regular issue portal.",
+                  user: req.user?.name || "Guest",
+                  isAuthenticated: req.isAuthenticated(),
+                });
+              }
+
+              // Transform results to match the frontend's expected format
+              const equipment = results.map((item) => ({
+                equipment: item.equipment,
+                outNum: item.quantity,
+                outTime: item.approvedOn || new Date().toISOString(),
+              }));
+
+              // Render the team issue page
+              res.render("team_issue", {
+                student: req.session.student,
+                equipment: equipment,
+                activePage: "team-landing",
                 user: req.user?.name || "Guest",
                 isAuthenticated: req.isAuthenticated(),
               });
             }
+          );
+        }
+      );
+    });
+  }
+);
 
-            // Transform results to match the frontend's expected format
-            const equipment = results.map((item) => ({
-              equipment: item.equipment,
-              outNum: item.quantity,
-              outTime: item.approvedOn || new Date().toISOString(),
-            }));
+app.get("/team_return_login", (req, res) => {
+  req.session.student = null; // force fresh QR
 
-            // Render the team issue page
-            res.render("team_issue", {
-              student: req.session.student,
-              equipment: equipment,
-              activePage: "team-landing",
-              user: req.user?.name || "Guest",
-              isAuthenticated: req.isAuthenticated(),
-            });
-          }
-        );
-      }
-    );
+  res.render("team_return_login", {
+    activePage: "team-return",
+    user: req.user ? req.user.name : "QR Mode",
+    isAuthenticated: !!req.user,
   });
 });
 
-app.get("/team_return", requireStudent, async (req, res) => {
+app.get("/team_return", async (req, res) => {
+  if (!req.session.student) {
+    return res.redirect("/team_return_login");
+  }
+
   const student = req.session.student;
 
   try {
@@ -743,13 +788,28 @@ app.get("/team_return", requireStudent, async (req, res) => {
       student,
       equipment,
       activePage: "team-return",
-      user: req.user?.name || "Guest",
-      isAuthenticated: req.isAuthenticated(),
+      user: req.user ? req.user.name : "QR Mode",
+      isAuthenticated: !!req.user,
     });
   } catch (err) {
     console.error("Error loading team return page:", err);
     res.status(500).send("Failed to load team return page");
   }
+});
+
+app.post("/team_return_login", (req, res) => {
+  const ashokaId = req.body.qrString?.trim();
+
+  const studentData = students.find(
+    (s) => String(s.AshokaId).trim() === ashokaId
+  );
+
+  if (!studentData) {
+    return res.status(404).send("Student not found");
+  }
+
+  req.session.student = studentData;
+  res.redirect("/team_return");
 });
 
 app.post("/return_team_equipment", requireStudent, async (req, res) => {
