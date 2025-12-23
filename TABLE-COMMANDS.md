@@ -95,6 +95,7 @@ ADD COLUMN offences INT DEFAULT 0,
 ADD COLUMN sportsTeamAuthorised BOOLEAN DEFAULT FALSE;
 
 ALTER TABLE SportsRequests ADD COLUMN issued BOOLEAN DEFAULT FALSE;
+ALTER TABLE SportsRequests ADD COLUMN returned BOOLEAN DEFAULT FALSE;
 
 INSERT INTO SportsRequests (studentEmail, studentName, equipment, quantity, startDate, endDate, approvedOn, issued)
 VALUES 
