@@ -825,22 +825,26 @@ app.post("/return_team_equipment", requireStudent, async (req, res) => {
 
   try {
     await connection.beginTransaction();
+
     const returnedCounts = {};
 
+    // 1. Mark Logs as returned
     for (const item of equipments) {
       const { equipment, outNum } = item;
-      returnedCounts[equipment] = (returnedCounts[equipment] || 0) + outNum;
+      returnedCounts[equipment] =
+        (returnedCounts[equipment] || 0) + Number(outNum);
 
-      // Fetch matching TEAM logs
       const [logs] = await connection.query(
-        `SELECT logID
-         FROM Logs
-         WHERE studentID = ?
-           AND equipmentBorrowed = ?
-           AND isTeamIssue = TRUE
-           AND pending = TRUE
-           AND returned = FALSE
-         LIMIT ?`,
+        `
+        SELECT logID
+        FROM Logs
+        WHERE studentID = ?
+          AND equipmentBorrowed = ?
+          AND isTeamIssue = TRUE
+          AND pending = TRUE
+          AND returned = FALSE
+        LIMIT ?
+        `,
         [studentId, equipment, outNum]
       );
 
@@ -848,32 +852,76 @@ app.post("/return_team_equipment", requireStudent, async (req, res) => {
         throw new Error(`Not enough team-issued ${equipment} found to return`);
       }
 
-      // Mark each log as returned
       for (const log of logs) {
         await connection.query(
-          `UPDATE Logs
-           SET pending = FALSE,
-               returned = TRUE,
-               returnedTimestamp = ?
-           WHERE logID = ?`,
+          `
+          UPDATE Logs
+          SET pending = FALSE,
+              returned = TRUE,
+              returnedTimestamp = ?
+          WHERE logID = ?
+          `,
           [returnTime, log.logID]
         );
       }
     }
+
+    // 2. Update Equipment inventory
     for (const [equipment, qty] of Object.entries(returnedCounts)) {
       const [result] = await connection.query(
         `
-    UPDATE Equipment
-    SET reservedQuantity = GREATEST(reservedQuantity - ?, 0),
-        inUseQuantity = inUseQuantity + ?
-    WHERE equipment = ?
-    `,
+        UPDATE Equipment
+        SET reservedQuantity = GREATEST(reservedQuantity - ?, 0),
+            inUseQuantity = inUseQuantity + ?
+        WHERE equipment = ?
+        `,
         [qty, qty, equipment]
       );
 
       if (result.affectedRows === 0) {
         throw new Error(
           `Equipment "${equipment}" not found while updating inventory`
+        );
+      }
+    }
+
+    // 3. Sync SportsRequests.returned
+    for (const equipment of Object.keys(returnedCounts)) {
+      const [[issuedRow]] = await connection.query(
+        `
+        SELECT COUNT(*) AS totalIssued
+        FROM Logs
+        WHERE studentID = ?
+          AND equipmentBorrowed = ?
+          AND isTeamIssue = TRUE
+        `,
+        [studentId, equipment]
+      );
+
+      const [[returnedRow]] = await connection.query(
+        `
+        SELECT COUNT(*) AS totalReturned
+        FROM Logs
+        WHERE studentID = ?
+          AND equipmentBorrowed = ?
+          AND isTeamIssue = TRUE
+          AND returned = TRUE
+        `,
+        [studentId, equipment]
+      );
+
+      if (issuedRow.totalIssued === returnedRow.totalReturned) {
+        await connection.query(
+          `
+          UPDATE SportsRequests
+          SET returned = TRUE
+          WHERE equipment = ?
+            AND issued = TRUE
+            AND studentEmail = (
+              SELECT studentEmail FROM Students WHERE studentID = ?
+            )
+          `,
+          [equipment, studentId]
         );
       }
     }
