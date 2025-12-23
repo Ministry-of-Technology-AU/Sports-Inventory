@@ -50,7 +50,7 @@
   </head>
 
   <body>
-    <%- include("nav",{ activePage: "team_issue" , config: "admin" , userName:
+    <%- include("nav",{ activePage: "team-return" , config: "admin" , userName:
     user }) %>
     <div class="box">
       <div class="up">
@@ -69,7 +69,7 @@
             color: white;
           "
         >
-          Sports Team Issue
+          Sports Team Return
         </h1>
       </div>
 
@@ -113,15 +113,15 @@
       <div class="bottom">
         <% if (equipment.length !=0) { %>
         <div class="button-group">
-          <button id="returnAllBtn">Issue All</button>
-          <button id="returnSelectedBtn">Issue Selected</button>
+          <button id="returnAllBtn">Return All</button>
+          <button id="returnSelectedBtn">Return Selected</button>
         </div>
         <% }%>
       </div>
     </div>
 
     <script>
-      // Return Selected functionality
+      // Return Selected (TEAM)
       document
         .getElementById("returnSelectedBtn")
         ?.addEventListener("click", async () => {
@@ -129,34 +129,31 @@
             document.querySelectorAll(".equipment-checkbox:checked")
           ).map((cb) => ({
             equipment: cb.value,
-            outNum: cb.dataset.quantity,
+            outNum: Number(cb.dataset.quantity),
           }));
 
           if (selected.length === 0) {
-            alert("Please select at least one item to issue.");
+            alert("Please select at least one item to return.");
             return;
           }
 
           try {
-            const res = await fetch("/issue_team_equipment", {
+            const res = await fetch("/return_team_equipment", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                equipments: selected.map((s) => s.equipment),
-              }),
+              body: JSON.stringify({ equipments: selected }),
             });
 
             const data = await res.json();
 
             if (data.success) {
-              // Call success endpoint with returned equipment data
               const successRes = await fetch("/success", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   issuedEquipment: selected,
                   name: "<%= student.name %>",
-                  mode: "issued",
+                  mode: "returned",
                 }),
               });
 
@@ -172,42 +169,38 @@
           }
         });
 
-      // Issue All functionality
+      // Return All (TEAM)
       document
         .getElementById("returnAllBtn")
         ?.addEventListener("click", async () => {
-          if (!confirm("Are you sure you want to issue all equipment?")) {
+          if (!confirm("Are you sure you want to return all team equipment?")) {
             return;
           }
 
-          // Get all equipment names from the table
           const allEquipment = Array.from(
             document.querySelectorAll(".equipment-checkbox")
           ).map((cb) => ({
             equipment: cb.value,
-            outNum: cb.dataset.quantity,
+            outNum: Number(cb.dataset.quantity),
           }));
 
           try {
-            const res = await fetch("/issue_team_equipment", {
+            const res = await fetch("/return_team_equipment", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                equipments: allEquipment.map((e) => e.equipment),
-              }),
+              body: JSON.stringify({ equipments: allEquipment }),
             });
 
             const data = await res.json();
 
             if (data.success) {
-              // Call success endpoint with returned equipment data
               const successRes = await fetch("/success", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   issuedEquipment: allEquipment,
                   name: "<%= student.name %>",
-                  mode: "issued",
+                  mode: "returned",
                 }),
               });
 
