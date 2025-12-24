@@ -290,7 +290,10 @@ async function sendTeamBorrowEmail(
       .join("<br>");
 
     // Replace placeholders in template
-    const emailHtml = TEAM_BORROW_TEMPLATE.replace(/{{captainName}}/g, captainName)
+    const emailHtml = TEAM_BORROW_TEMPLATE.replace(
+      /{{captainName}}/g,
+      captainName
+    )
       .replace(/{{teamName}}/g, teamName)
       .replace(/{{sportType}}/g, sportType)
       .replace(/{{borrowedEquipment}}/g, equipmentList)
@@ -345,7 +348,10 @@ async function sendTeamReturnEmail(
       .join("<br>");
 
     // Replace placeholders in template
-    const emailHtml = TEAM_RETURN_TEMPLATE.replace(/{{captainName}}/g, captainName)
+    const emailHtml = TEAM_RETURN_TEMPLATE.replace(
+      /{{captainName}}/g,
+      captainName
+    )
       .replace(/{{teamName}}/g, teamName)
       .replace(/{{sportType}}/g, sportType)
       .replace(/{{returnedEquipment}}/g, equipmentList)
@@ -401,7 +407,10 @@ async function sendTeamOverdueEmail(
       .join("<br>");
 
     // Replace placeholders in template
-    const emailHtml = TEAM_OVERDUE_TEMPLATE.replace(/{{captainName}}/g, captainName)
+    const emailHtml = TEAM_OVERDUE_TEMPLATE.replace(
+      /{{captainName}}/g,
+      captainName
+    )
       .replace(/{{teamName}}/g, teamName)
       .replace(/{{sportType}}/g, sportType)
       .replace(/{{pendingEquipment}}/g, equipmentList)
@@ -636,18 +645,31 @@ app.use(passport.session());
 
 // Global authentication middleware
 app.use((req, res, next) => {
-  // Public paths don't need any authentication
-  // Public paths don't need any authentication
+  // ================= PUBLIC / API / STATIC PATHS =================
   if (
+    // Auth
     req.path.startsWith("/auth") ||
     req.path === "/" ||
+    req.path === "/unauthorized" ||
+    req.path === "/logout" ||
+    // Static assets
+    req.path.startsWith("/style") ||
+    req.path.startsWith("/images") ||
+    // JSON / API endpoints (used by fetch / JS)
+    req.path === "/getequipment" ||
+    req.path === "/get_offences" ||
+    // Login + QR entry points
     req.path === "/issue_login" ||
     req.path === "/return_login" ||
     req.path === "/issue_team_login" ||
     req.path === "/team_return_login" ||
-    req.path === "/team_return" ||
-    req.path === "/logout" ||
-    req.path === "/unauthorized"
+    // Form submit endpoints that MUST work without OAuth
+    req.path === "/issue_login_sports" ||
+    req.path === "/issue_login" ||
+    req.path === "/return_login" ||
+    // Public landing redirects
+    req.path === "/landing" ||
+    req.path === "/team_landing"
   ) {
     return next();
   }
@@ -1174,7 +1196,7 @@ app.post("/return_team_equipment", requireStudent, async (req, res) => {
 
     // Send team return confirmation email
     const student = req.session.student;
-    
+
     // Get student email
     const emailRows = await db.query(
       "SELECT studentEmail FROM Students WHERE studentID = ?",
@@ -1184,7 +1206,7 @@ app.post("/return_team_equipment", requireStudent, async (req, res) => {
     if (emailRows.length > 0) {
       const studentEmail = emailRows[0].studentEmail;
       const returnDate = moment().tz("Asia/Kolkata").format("MMMM D, YYYY");
-      
+
       // Get the original issue date from the first log
       const issueLogs = await db.query(
         `SELECT timestamp FROM Logs 
@@ -1192,10 +1214,13 @@ app.post("/return_team_equipment", requireStudent, async (req, res) => {
          ORDER BY timestamp ASC LIMIT 1`,
         [studentId]
       );
-      
-      const issueDate = issueLogs.length > 0
-        ? moment(issueLogs[0].timestamp).tz("Asia/Kolkata").format("MMMM D, YYYY")
-        : "N/A";
+
+      const issueDate =
+        issueLogs.length > 0
+          ? moment(issueLogs[0].timestamp)
+              .tz("Asia/Kolkata")
+              .format("MMMM D, YYYY")
+          : "N/A";
 
       const teamName = "Sports Team"; // You may want to add this to the request
       const sportType = Object.keys(returnedCounts).join(", ");
