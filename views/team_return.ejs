@@ -3,16 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Landing Page</title>
+    <title>Sports Team Return</title>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
       rel="stylesheet"
     />
+
     <link rel="stylesheet" href="/style/landing.css" />
     <link rel="stylesheet" href="/style/return-page.css" />
     <link rel="stylesheet" href="/style/global.css" />
+
     <style>
       body {
         background-color: var(--off-white);
@@ -25,7 +28,8 @@
         align-items: center;
       }
 
-      #returnAllBtn {
+      #returnAllBtn,
+      #returnSelectedBtn {
         background: var(--primary-color);
         color: var(--text-color-secondary);
         border: none;
@@ -37,8 +41,8 @@
         transition: all 0.3s ease;
       }
 
-      #returnAllBtn:hover {
-        background: var(--primary-color);
+      #returnAllBtn:hover,
+      #returnSelectedBtn:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 16px rgba(13, 56, 98, 0.3);
       }
@@ -50,15 +54,18 @@
   </head>
 
   <body>
-    <%- include("nav",{ activePage: "team-return" , config: "admin" , userName:
+    <%- include("nav",{ activePage: "team-return", config: "admin", userName:
     user }) %>
+
     <div class="box">
       <div class="up">
         <h1 class="details">
           <p><%= student.name %></p>
           <p><%= student.AshokaId %></p>
         </h1>
+
         <h1>Equipment Reserved</h1>
+
         <h1
           style="
             margin-left: 20px;
@@ -73,7 +80,7 @@
         </h1>
       </div>
 
-      <% if (equipment.length===0) { %>
+      <% if (equipment.length === 0) { %>
       <p class="noPendingEquipment">No pending equipment</p>
       <% } else { %>
       <table border="1" cellpadding="5">
@@ -82,7 +89,7 @@
             <th>Equipment</th>
             <th>Quantity Reserved</th>
             <th>Date of Reserving</th>
-            <th>Issue</th>
+            <th>Return</th>
           </tr>
         </thead>
         <tbody>
@@ -106,25 +113,44 @@
           <% }); %>
         </tbody>
       </table>
-
-      <br />
-      <% } %>
-
+      <% } %> <% if (equipment.length !== 0) { %>
       <div class="bottom">
-        <% if (equipment.length !=0) { %>
         <div class="button-group">
           <button id="returnAllBtn">Return All</button>
           <button id="returnSelectedBtn">Return Selected</button>
         </div>
-        <% }%>
       </div>
+      <% } %>
     </div>
+    <form id="teamReturnForm" method="POST" action="/return_team_equipment">
+      <input type="hidden" name="equipments" id="equipmentsInput" />
+    </form>
 
     <script>
-      // Return Selected (TEAM)
+      let returnInProgress = false;
+
+      function disableReturnButtons() {
+        const allBtn = document.getElementById("returnAllBtn");
+        const selectedBtn = document.getElementById("returnSelectedBtn");
+        if (allBtn) allBtn.disabled = true;
+        if (selectedBtn) selectedBtn.disabled = true;
+      }
+
+      function returnTeamEquipment(equipments) {
+        if (returnInProgress) return;
+        returnInProgress = true;
+        disableReturnButtons();
+
+        document.getElementById("equipmentsInput").value =
+          JSON.stringify(equipments);
+
+        document.getElementById("teamReturnForm").submit();
+      }
+
+      // Return Selected
       document
         .getElementById("returnSelectedBtn")
-        ?.addEventListener("click", async () => {
+        ?.addEventListener("click", () => {
           const selected = Array.from(
             document.querySelectorAll(".equipment-checkbox:checked")
           ).map((cb) => ({
@@ -137,84 +163,24 @@
             return;
           }
 
-          try {
-            const res = await fetch("/return_team_equipment", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ equipments: selected }),
-            });
-
-            const data = await res.json();
-
-            if (data.success) {
-              const successRes = await fetch("/success", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  issuedEquipment: selected,
-                  name: "<%= student.name %>",
-                  mode: "returned",
-                }),
-              });
-
-              const successHtml = await successRes.text();
-              document.open();
-              document.write(successHtml);
-              document.close();
-            } else {
-              alert("Error: " + data.error);
-            }
-          } catch (err) {
-            alert("Network error: " + err.message);
-          }
+          returnTeamEquipment(selected);
         });
 
-      // Return All (TEAM)
-      document
-        .getElementById("returnAllBtn")
-        ?.addEventListener("click", async () => {
-          if (!confirm("Are you sure you want to return all team equipment?")) {
-            return;
-          }
+      // Return All
+      document.getElementById("returnAllBtn")?.addEventListener("click", () => {
+        if (!confirm("Are you sure you want to return all team equipment?")) {
+          return;
+        }
 
-          const allEquipment = Array.from(
-            document.querySelectorAll(".equipment-checkbox")
-          ).map((cb) => ({
-            equipment: cb.value,
-            outNum: Number(cb.dataset.quantity),
-          }));
+        const allEquipment = Array.from(
+          document.querySelectorAll(".equipment-checkbox")
+        ).map((cb) => ({
+          equipment: cb.value,
+          outNum: Number(cb.dataset.quantity),
+        }));
 
-          try {
-            const res = await fetch("/return_team_equipment", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ equipments: allEquipment }),
-            });
-
-            const data = await res.json();
-
-            if (data.success) {
-              const successRes = await fetch("/success", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  issuedEquipment: allEquipment,
-                  name: "<%= student.name %>",
-                  mode: "returned",
-                }),
-              });
-
-              const successHtml = await successRes.text();
-              document.open();
-              document.write(successHtml);
-              document.close();
-            } else {
-              alert("Error: " + data.error);
-            }
-          } catch (err) {
-            alert("Network error: " + err.message);
-          }
-        });
+        returnTeamEquipment(allEquipment);
+      });
     </script>
   </body>
 </html>

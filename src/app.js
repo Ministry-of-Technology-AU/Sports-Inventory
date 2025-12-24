@@ -645,29 +645,32 @@ app.use(passport.session());
 
 // Global authentication middleware
 app.use((req, res, next) => {
-  // ================= PUBLIC / API / STATIC PATHS =================
+  // ================= PUBLIC / API / FETCH ROUTES =================
   if (
-    // Auth
+    // ---------- Auth & landing ----------
     req.path.startsWith("/auth") ||
     req.path === "/" ||
-    req.path === "/unauthorized" ||
     req.path === "/logout" ||
-    // Static assets
+    req.path === "/unauthorized" ||
+    // ---------- Static assets ----------
     req.path.startsWith("/style") ||
     req.path.startsWith("/images") ||
-    // JSON / API endpoints (used by fetch / JS)
+    // ---------- FETCH / API routes ----------
     req.path === "/getequipment" ||
     req.path === "/get_offences" ||
-    // Login + QR entry points
+    req.path === "/sports_request" ||
+    req.path === "/update_inventory" ||
+    req.path === "/delete_inventory" ||
+    req.path === "/returnMany" ||
+    req.path === "/issue_team_equipment" ||
+    req.path === "/return_team_equipment" ||
+    // ---------- QR / login endpoints ----------
     req.path === "/issue_login" ||
+    req.path === "/issue_login_sports" ||
     req.path === "/return_login" ||
     req.path === "/issue_team_login" ||
     req.path === "/team_return_login" ||
-    // Form submit endpoints that MUST work without OAuth
-    req.path === "/issue_login_sports" ||
-    req.path === "/issue_login" ||
-    req.path === "/return_login" ||
-    // Public landing redirects
+    // ---------- Public landings ----------
     req.path === "/landing" ||
     req.path === "/team_landing"
   ) {
@@ -1079,7 +1082,11 @@ app.post("/team_return_login", (req, res) => {
 });
 
 app.post("/return_team_equipment", requireStudent, async (req, res) => {
-  const { equipments } = req.body;
+  const equipments =
+    typeof req.body.equipments === "string"
+      ? JSON.parse(req.body.equipments)
+      : req.body.equipments;
+
   const studentId = req.session.student.AshokaId;
   const returnTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 
@@ -1238,7 +1245,16 @@ app.post("/return_team_equipment", requireStudent, async (req, res) => {
       );
     }
 
-    res.json({ success: true });
+    res.render("success", {
+      user: req.user?.name || "Guest",
+      isAuthenticated: req.isAuthenticated(),
+      studentName: student.name,
+      mode: "returned",
+      equipment: Object.entries(returnedCounts).map(([equipment, outNum]) => ({
+        equipment,
+        outNum,
+      })),
+    });
   } catch (err) {
     await connection.rollback();
     console.error("Team return error:", err);
@@ -1446,7 +1462,11 @@ app.post("/issue", (req, res) => {
 });
 
 app.post("/issue_team_equipment", requireStudent, async (req, res) => {
-  const selectedEquipments = req.body.equipments;
+  const selectedEquipments =
+    typeof req.body.equipments === "string"
+      ? JSON.parse(req.body.equipments)
+      : req.body.equipments;
+
   const student = req.session.student;
 
   if (!selectedEquipments || selectedEquipments.length === 0) {
@@ -1556,7 +1576,16 @@ app.post("/issue_team_equipment", requireStudent, async (req, res) => {
       returnDate
     );
 
-    res.json({ success: true });
+    res.render("success", {
+      user: req.user?.name || "Guest",
+      isAuthenticated: req.isAuthenticated(),
+      studentName: student.name,
+      mode: "issued",
+      equipment: Object.entries(equipmentCounts).map(([equipment, outNum]) => ({
+        equipment,
+        outNum,
+      })),
+    });
   } catch (err) {
     console.error("Team issue error:", err);
     res.status(500).json({ success: false, error: "Team issue failed" });
