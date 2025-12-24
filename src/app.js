@@ -134,6 +134,18 @@ const OVERDUE_TEMPLATE = fs.readFileSync(
   path.join(__dirname, "../templates/overdue.html"),
   "utf-8"
 );
+const TEAM_BORROW_TEMPLATE = fs.readFileSync(
+  path.join(__dirname, "../templates/team-borrow.html"),
+  "utf-8"
+);
+const TEAM_RETURN_TEMPLATE = fs.readFileSync(
+  path.join(__dirname, "../templates/team-return.html"),
+  "utf-8"
+);
+const TEAM_OVERDUE_TEMPLATE = fs.readFileSync(
+  path.join(__dirname, "../templates/team-overdue.html"),
+  "utf-8"
+);
 
 /**
  * Send borrow confirmation email
@@ -252,6 +264,171 @@ async function sendOverdueEmail(studentEmail, studentName, equipmentCounts) {
   }
 }
 
+/**
+ * Send team borrow confirmation email
+ * @param {string} captainEmail - Team captain's email address
+ * @param {string} captainName - Team captain's name
+ * @param {string} teamName - Team name
+ * @param {string} sportType - Sport type
+ * @param {object} equipmentCounts - Object mapping equipment name to quantity
+ * @param {string} issueDate - Date equipment was issued
+ * @param {string} returnDate - Expected return date
+ */
+async function sendTeamBorrowEmail(
+  captainEmail,
+  captainName,
+  teamName,
+  sportType,
+  equipmentCounts,
+  issueDate,
+  returnDate
+) {
+  try {
+    // Format equipment list with each item on a new line
+    const equipmentList = Object.entries(equipmentCounts)
+      .map(([equipment, qty]) => `${equipment} - ${qty}`)
+      .join("<br>");
+
+    // Replace placeholders in template
+    const emailHtml = TEAM_BORROW_TEMPLATE.replace(/{{captainName}}/g, captainName)
+      .replace(/{{teamName}}/g, teamName)
+      .replace(/{{sportType}}/g, sportType)
+      .replace(/{{borrowedEquipment}}/g, equipmentList)
+      .replace(/{{issueDate}}/g, issueDate)
+      .replace(/{{returnDate}}/g, returnDate);
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: captainEmail,
+      subject: `Team Equipment Borrowed - ${teamName}`,
+      html: emailHtml,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    logToFile(
+      `📧 Team borrow email sent to ${captainEmail} (${teamName}) - MessageID: ${info.messageId}`
+    );
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    logToFile(
+      `❌ Failed to send team borrow email to ${captainEmail}: ${error.message}`
+    );
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Send team return confirmation email
+ * @param {string} captainEmail - Team captain's email address
+ * @param {string} captainName - Team captain's name
+ * @param {string} teamName - Team name
+ * @param {string} sportType - Sport type
+ * @param {object} equipmentCounts - Object mapping equipment name to quantity
+ * @param {string} issueDate - Original issue date
+ * @param {string} returnDate - Date equipment was returned
+ * @param {string} equipmentStatus - Status message (e.g., "All equipment in good condition")
+ */
+async function sendTeamReturnEmail(
+  captainEmail,
+  captainName,
+  teamName,
+  sportType,
+  equipmentCounts,
+  issueDate,
+  returnDate,
+  equipmentStatus
+) {
+  try {
+    // Format equipment list with each item on a new line
+    const equipmentList = Object.entries(equipmentCounts)
+      .map(([equipment, qty]) => `${equipment} - ${qty}`)
+      .join("<br>");
+
+    // Replace placeholders in template
+    const emailHtml = TEAM_RETURN_TEMPLATE.replace(/{{captainName}}/g, captainName)
+      .replace(/{{teamName}}/g, teamName)
+      .replace(/{{sportType}}/g, sportType)
+      .replace(/{{returnedEquipment}}/g, equipmentList)
+      .replace(/{{issueDate}}/g, issueDate)
+      .replace(/{{returnDate}}/g, returnDate)
+      .replace(/{{equipmentStatus}}/g, equipmentStatus);
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: captainEmail,
+      subject: `Team Equipment Returned - ${teamName}`,
+      html: emailHtml,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    logToFile(
+      `📧 Team return email sent to ${captainEmail} (${teamName}) - MessageID: ${info.messageId}`
+    );
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    logToFile(
+      `❌ Failed to send team return email to ${captainEmail}: ${error.message}`
+    );
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Send team overdue equipment reminder email
+ * @param {string} captainEmail - Team captain's email address
+ * @param {string} captainName - Team captain's name
+ * @param {string} teamName - Team name
+ * @param {string} sportType - Sport type
+ * @param {object} equipmentCounts - Object mapping equipment name to quantity
+ * @param {string} issueDate - Original issue date
+ * @param {string} returnDate - Expected return date
+ * @param {number} daysOverdue - Number of days overdue
+ */
+async function sendTeamOverdueEmail(
+  captainEmail,
+  captainName,
+  teamName,
+  sportType,
+  equipmentCounts,
+  issueDate,
+  returnDate,
+  daysOverdue
+) {
+  try {
+    // Format equipment list with each item on a new line
+    const equipmentList = Object.entries(equipmentCounts)
+      .map(([equipment, qty]) => `${equipment} - ${qty}`)
+      .join("<br>");
+
+    // Replace placeholders in template
+    const emailHtml = TEAM_OVERDUE_TEMPLATE.replace(/{{captainName}}/g, captainName)
+      .replace(/{{teamName}}/g, teamName)
+      .replace(/{{sportType}}/g, sportType)
+      .replace(/{{pendingEquipment}}/g, equipmentList)
+      .replace(/{{issueDate}}/g, issueDate)
+      .replace(/{{returnDate}}/g, returnDate)
+      .replace(/{{daysOverdue}}/g, daysOverdue.toString());
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: captainEmail,
+      subject: `⚠️ URGENT: Team Equipment Overdue - ${teamName}`,
+      html: emailHtml,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    logToFile(
+      `📧 Team overdue email sent to ${captainEmail} (${teamName}) - MessageID: ${info.messageId}`
+    );
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    logToFile(
+      `❌ Failed to send team overdue email to ${captainEmail}: ${error.message}`
+    );
+    return { success: false, error: error.message };
+  }
+}
+
 // ========================================================
 // OVERDUE TRACKING & CRON JOB
 // ========================================================
@@ -279,6 +456,7 @@ async function checkAndNotifyOverdue() {
         l.studentName,
         l.studentEmail,
         l.equipmentBorrowed,
+        l.isTeamIssue,
         COUNT(*) as quantity,
         MIN(l.timestamp) as oldestBorrow,
         MIN(l.dueOn) as earliestDue
@@ -286,7 +464,7 @@ async function checkAndNotifyOverdue() {
       WHERE l.pending = TRUE 
         AND l.returned = FALSE
         AND l.dueOn < ?
-      GROUP BY l.studentID, l.studentName, l.studentEmail, l.equipmentBorrowed
+      GROUP BY l.studentID, l.studentName, l.studentEmail, l.equipmentBorrowed, l.isTeamIssue
     `;
 
     const overdueItems = await db.query(overdueQuery, [currentTime]);
@@ -296,27 +474,46 @@ async function checkAndNotifyOverdue() {
       return;
     }
 
-    // Group by student
+    // Group by student and type (regular vs team)
     const studentOverdueMap = new Map();
+    const teamOverdueMap = new Map();
 
     overdueItems.forEach((item) => {
-      if (!studentOverdueMap.has(item.studentID)) {
-        studentOverdueMap.set(item.studentID, {
-          studentEmail: item.studentEmail,
-          studentName: item.studentName,
-          equipment: {},
-        });
+      if (item.isTeamIssue) {
+        // Team equipment
+        if (!teamOverdueMap.has(item.studentID)) {
+          teamOverdueMap.set(item.studentID, {
+            studentEmail: item.studentEmail,
+            studentName: item.studentName,
+            equipment: {},
+            oldestBorrow: item.oldestBorrow,
+            earliestDue: item.earliestDue,
+          });
+        }
+        const student = teamOverdueMap.get(item.studentID);
+        student.equipment[item.equipmentBorrowed] = item.quantity;
+      } else {
+        // Regular equipment
+        if (!studentOverdueMap.has(item.studentID)) {
+          studentOverdueMap.set(item.studentID, {
+            studentEmail: item.studentEmail,
+            studentName: item.studentName,
+            equipment: {},
+          });
+        }
+        const student = studentOverdueMap.get(item.studentID);
+        student.equipment[item.equipmentBorrowed] = item.quantity;
       }
-
-      const student = studentOverdueMap.get(item.studentID);
-      student.equipment[item.equipmentBorrowed] = item.quantity;
     });
 
     logToFile(
       `   📊 Found ${studentOverdueMap.size} students with overdue equipment`
     );
+    logToFile(
+      `   📊 Found ${teamOverdueMap.size} teams with overdue equipment`
+    );
 
-    // Send emails (one per student per day)
+    // Send emails for regular equipment (one per student per day)
     for (const [studentID, data] of studentOverdueMap.entries()) {
       const lastEmailDate = overdueEmailTracker.get(studentID);
 
@@ -339,6 +536,53 @@ async function checkAndNotifyOverdue() {
         // Mark as emailed today
         overdueEmailTracker.set(studentID, today);
         logToFile(`   ✅ Sent overdue notification to ${data.studentName}`);
+      }
+    }
+
+    // Send emails for team equipment (one per team captain per day)
+    for (const [studentID, data] of teamOverdueMap.entries()) {
+      const teamKey = `team_${studentID}`;
+      const lastEmailDate = overdueEmailTracker.get(teamKey);
+
+      // Check if we already sent an email today
+      if (lastEmailDate === today) {
+        logToFile(
+          `   ⏭️  Skipping team captain ${data.studentName} - already emailed today`
+        );
+        continue;
+      }
+
+      // Calculate days overdue
+      const dueDate = moment(data.earliestDue).tz("Asia/Kolkata");
+      const daysOverdue = now.diff(dueDate, "days");
+
+      // Format dates
+      const issueDate = moment(data.oldestBorrow)
+        .tz("Asia/Kolkata")
+        .format("MMMM D, YYYY");
+      const returnDate = dueDate.format("MMMM D, YYYY");
+
+      const teamName = "Sports Team"; // You may want to pull this from database
+      const sportType = Object.keys(data.equipment).join(", ");
+
+      // Send team overdue email
+      const result = await sendTeamOverdueEmail(
+        data.studentEmail,
+        data.studentName,
+        teamName,
+        sportType,
+        data.equipment,
+        issueDate,
+        returnDate,
+        daysOverdue
+      );
+
+      if (result.success) {
+        // Mark as emailed today
+        overdueEmailTracker.set(teamKey, today);
+        logToFile(
+          `   ✅ Sent team overdue notification to ${data.studentName}`
+        );
       }
     }
 
@@ -927,6 +1171,48 @@ app.post("/return_team_equipment", requireStudent, async (req, res) => {
     }
 
     await connection.commit();
+
+    // Send team return confirmation email
+    const student = req.session.student;
+    
+    // Get student email
+    const emailRows = await db.query(
+      "SELECT studentEmail FROM Students WHERE studentID = ?",
+      [studentId]
+    );
+
+    if (emailRows.length > 0) {
+      const studentEmail = emailRows[0].studentEmail;
+      const returnDate = moment().tz("Asia/Kolkata").format("MMMM D, YYYY");
+      
+      // Get the original issue date from the first log
+      const issueLogs = await db.query(
+        `SELECT timestamp FROM Logs 
+         WHERE studentID = ? AND isTeamIssue = TRUE 
+         ORDER BY timestamp ASC LIMIT 1`,
+        [studentId]
+      );
+      
+      const issueDate = issueLogs.length > 0
+        ? moment(issueLogs[0].timestamp).tz("Asia/Kolkata").format("MMMM D, YYYY")
+        : "N/A";
+
+      const teamName = "Sports Team"; // You may want to add this to the request
+      const sportType = Object.keys(returnedCounts).join(", ");
+      const equipmentStatus = "All equipment returned successfully";
+
+      await sendTeamReturnEmail(
+        studentEmail,
+        student.name,
+        teamName,
+        sportType,
+        returnedCounts,
+        issueDate,
+        returnDate,
+        equipmentStatus
+      );
+    }
+
     res.json({ success: true });
   } catch (err) {
     await connection.rollback();
@@ -1217,6 +1503,32 @@ app.post("/issue_team_equipment", requireStudent, async (req, res) => {
          AND equipment IN (${placeholders})
          AND (issued IS NULL OR issued = FALSE)`,
       [studentEmail, student.name, ...selectedEquipments]
+    );
+
+    // Send team borrow confirmation email
+    const equipmentCounts = {};
+    requests.forEach((reqItem) => {
+      equipmentCounts[reqItem.equipment] = reqItem.quantity;
+    });
+
+    const issueDate = moment().tz("Asia/Kolkata").format("MMMM D, YYYY");
+    const returnDate = moment()
+      .tz("Asia/Kolkata")
+      .add(7, "days")
+      .format("MMMM D, YYYY");
+
+    // Determine team name and sport type from equipment
+    const teamName = "Sports Team"; // You may want to add this to the request
+    const sportType = selectedEquipments.join(", ");
+
+    await sendTeamBorrowEmail(
+      studentEmail,
+      student.name,
+      teamName,
+      sportType,
+      equipmentCounts,
+      issueDate,
+      returnDate
     );
 
     res.json({ success: true });
