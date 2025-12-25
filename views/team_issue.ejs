@@ -116,7 +116,6 @@
       <% } %> <% if (equipment.length !== 0) { %>
       <div class="bottom">
         <div class="button-group">
-          <button id="issueAllBtn">Issue All</button>
           <button id="issueSelectedBtn">Issue Selected</button>
         </div>
       </div>
@@ -161,20 +160,6 @@
 
           issueTeamEquipment(selected);
         });
-
-      // Issue All
-      document.getElementById("issueAllBtn")?.addEventListener("click", () => {
-        if (!confirm("Are you sure you want to issue all equipment?")) return;
-
-        const allEquipment = Array.from(
-          document.querySelectorAll(".equipment-checkbox")
-        ).map((cb) => ({
-          equipment: cb.value,
-          outNum: Number(cb.dataset.quantity),
-        }));
-
-        issueTeamEquipment(allEquipment);
-      });
     </script>
   </body>
 </html>

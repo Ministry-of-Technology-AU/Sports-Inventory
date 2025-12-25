@@ -376,7 +376,12 @@
           body: JSON.stringify(requestData),
         })
           .then((res) => res.json())
-          .then((data) => alert(data.message))
+          .then((data) => {
+            alert(data.message);
+            if (data.success) {
+              window.location.reload(); // reload admin page
+            }
+          })
           .catch(() => alert("Something went wrong!"));
       });
   </script>
