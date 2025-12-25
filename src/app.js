@@ -791,6 +791,15 @@ app.use((req, res, next) => {
   // Default: redirect to issue login
   res.redirect("/issue_login");
 });
+
+function viewUser(req) {
+  return {
+    user: req.user?.name || "",
+    isAuthenticated: req.isAuthenticated(),
+    isAdmin: req.user?.role === "admin",
+  };
+}
+
 function requireStudent(req, res, next) {
   if (req.session.student) {
     return next();
@@ -805,6 +814,14 @@ function requireStudent(req, res, next) {
 
   // Issue-side pages
   return res.redirect("/issue_login");
+}
+function ensureAdmin(req, res, next) {
+  if (req.isAuthenticated() && req.user?.role === "admin") {
+    return next();
+  }
+  return res.status(403).render("error", {
+    msg: "Forbidden: Admin access only",
+  });
 }
 
 function ensureAuthenticated(req, res, next) {
@@ -883,8 +900,7 @@ const BASE_URL = process.env.BASE_URL;
 app.get("/", (req, res) => {
   res.render("issue_login", {
     activePage: "issue",
-    user: req.user?.name || "Guest",
-    isAuthenticated: req.isAuthenticated(),
+    ...viewUser(req),
   });
 });
 
@@ -894,8 +910,7 @@ app.get("/issue_login", (req, res) => {
   }
   res.render("issue_login", {
     activePage: "issue",
-    user: req.user.name,
-    isAuthenticated: true,
+    ...viewUser(req),
   });
 });
 
@@ -994,8 +1009,7 @@ app.get("/issue_team_login", (req, res) => {
   req.session.student = null; // FORCE fresh QR
   res.render("issue_login", {
     activePage: "team-landing",
-    user: "Guest",
-    isAuthenticated: req.isAuthenticated(),
+    viewUser: viewUser(req),
   });
 });
 
@@ -1055,8 +1069,7 @@ app.get(
                 return res.render("error", {
                   errorMsg:
                     "No valid sports equipment request found for your account. Please use the regular issue portal.",
-                  user: req.user?.name || "Guest",
-                  isAuthenticated: req.isAuthenticated(),
+                  ...viewUser(req),
                 });
               }
 
@@ -1072,8 +1085,7 @@ app.get(
                 student: req.session.student,
                 equipment: equipment,
                 activePage: "team-landing",
-                user: req.user?.name || "Guest",
-                isAuthenticated: req.isAuthenticated(),
+                ...viewUser(req),
               });
             }
           );
@@ -1088,8 +1100,7 @@ app.get("/team_return_login", (req, res) => {
 
   res.render("team_return_login", {
     activePage: "team-return",
-    user: req.user ? req.user.name : "QR Mode",
-    isAuthenticated: !!req.user,
+    ...viewUser(req),
   });
 });
 
@@ -1129,8 +1140,7 @@ app.get("/team_return", async (req, res) => {
       student,
       equipment,
       activePage: "team-return",
-      user: req.user ? req.user.name : "QR Mode",
-      isAuthenticated: !!req.user,
+      ...viewUser(req),
     });
   } catch (err) {
     console.error("Error loading team return page:", err);
@@ -1318,8 +1328,7 @@ app.post("/return_team_equipment", requireStudent, async (req, res) => {
     }
 
     res.render("success", {
-      user: req.user?.name || "Guest",
-      isAuthenticated: req.isAuthenticated(),
+      ...viewUser(req),
       studentName: student.name,
       mode: "returned",
       equipment: Object.entries(returnedCounts).map(([equipment, outNum]) => ({
@@ -1364,8 +1373,7 @@ app.get("/issue", (req, res) => {
         student: req.session.student,
         availableItems: availableItems,
         activePage: "issue",
-        user: req.user?.name || "Guest",
-        isAuthenticated: req.isAuthenticated(),
+        ...viewUser(req),
       });
     }
   );
@@ -1518,8 +1526,7 @@ app.post("/issue", (req, res) => {
                     res.render("success", {
                       studentName: req.session.student.name,
                       equipment: issuedEquipment,
-                      user: req.user?.name || "Guest",
-                      isAuthenticated: req.isAuthenticated(),
+                      ...viewUser(req),
                       mode: "issued",
                     });
                   }
@@ -1649,8 +1656,7 @@ app.post("/issue_team_equipment", requireStudent, async (req, res) => {
     );
 
     res.render("success", {
-      user: req.user?.name || "Guest",
-      isAuthenticated: req.isAuthenticated(),
+      ...viewUser(req),
       studentName: student.name,
       mode: "issued",
       equipment: Object.entries(equipmentCounts).map(([equipment, outNum]) => ({
@@ -1667,8 +1673,7 @@ app.post("/issue_team_equipment", requireStudent, async (req, res) => {
 app.get("/return_login", (req, res) => {
   res.render("return_login", {
     activePage: "landing",
-    user: req.user?.name || "Guest",
-    isAuthenticated: req.isAuthenticated(),
+    ...viewUser(req),
   });
 });
 
@@ -1691,8 +1696,7 @@ app.get("/landing", (req, res) => {
   res.render("landing_redirect", {
     ashokaId: req.session.student.AshokaId,
     activePage: "landing",
-    user: req.user?.name || "Guest",
-    isAuthenticated: req.isAuthenticated(),
+    ...viewUser(req),
   });
 });
 
@@ -1736,8 +1740,7 @@ app.post("/landing", async (req, res) => {
       res.render("landing", {
         student: studentData,
         equipment: results,
-        user: req.user?.name || "Guest",
-        isAuthenticated: req.isAuthenticated(),
+        ...viewUser(req),
       });
     }
   );
@@ -2144,12 +2147,11 @@ app.get("/get_offences", ensureAuthenticated, (req, res) => {
 app.get("/team_landing", (req, res) => {
   res.render("team_landing", {
     activePage: "team-landing",
-    user: req.user?.name || "Guest",
-    isAuthenticated: req.isAuthenticated(),
+    ...viewUser(req),
   });
 });
 
-app.get("/admin", ensureAuthenticated, (req, res) => {
+app.get("/admin", ensureAdmin, (req, res) => {
   db.query("SELECT * FROM Equipment", (err, results) => {
     if (err) {
       console.error("Database error:", err);
@@ -2168,18 +2170,16 @@ app.get("/admin", ensureAuthenticated, (req, res) => {
 
     res.render("admin", {
       activePage: "admin",
-      user: req.user?.name || "Guest",
-      isAuthenticated: req.isAuthenticated(),
+      ...viewUser(req),
       equipment: equipmentData,
     });
   });
 });
 
-app.get("/statistics", ensureAuthenticated, (req, res) => {
+app.get("/statistics", ensureAdmin, (req, res) => {
   res.render("dashboard", {
     activePage: "statistics",
-    user: req.user?.name || "Guest",
-    isAuthenticated: req.isAuthenticated(),
+    ...viewUser(req),
   });
 });
 
@@ -2207,8 +2207,7 @@ app.post("/success", (req, res) => {
   }));
 
   res.render("success", {
-    user: req.user?.name || "Guest",
-    isAuthenticated: req.isAuthenticated(),
+    ...viewUser(req),
     studentName: req.body.name || "Unknown",
     mode: req.body.mode || "processed",
     equipment: groupedArray,
