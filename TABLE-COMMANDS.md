@@ -26,11 +26,15 @@ CREATE TABLE Students (
 CREATE TABLE SportsRequests (
     studentEmail VARCHAR(100),
     studentName VARCHAR(100),
+    team VARCHAR(20) DEFAULT NULL,
     equipment VARCHAR(100),
     quantity INT NOT NULL,
     startDate DATE NOT NULL,
     endDate DATE NOT NULL,
     approvedOn TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    issued BOOLEAN DEFAULT FALSE,
+    returned BOOLEAN DEFAULT FALSE,
+    
 
     CONSTRAINT fk_student_email FOREIGN KEY (studentEmail)
         REFERENCES Students(studentEmail),
@@ -54,7 +58,7 @@ CREATE TABLE Logs (
     returnedByID VARCHAR(50) NULL,
     returnedByEmail VARCHAR(100) NULL,
     damaged ENUM('Yes', 'No') DEFAULT 'No',
-    isTeamIssue BOOLEAN NOT NULL DEFAULT FALSE;
+    isTeamIssue BOOLEAN NOT NULL DEFAULT FALSE,
     
     CONSTRAINT fk_logs_equipment FOREIGN KEY (equipmentBorrowed)
         REFERENCES Equipment(equipment),
@@ -95,8 +99,6 @@ ADD COLUMN borrowedOutstanding INT DEFAULT 0,
 ADD COLUMN offences INT DEFAULT 0,
 ADD COLUMN sportsTeamAuthorised BOOLEAN DEFAULT FALSE;
 
-ALTER TABLE SportsRequests ADD COLUMN issued BOOLEAN DEFAULT FALSE;
-ALTER TABLE SportsRequests ADD COLUMN returned BOOLEAN DEFAULT FALSE;
 
 INSERT INTO SportsRequests (studentEmail, studentName, equipment, quantity, startDate, endDate, approvedOn, issued)
 VALUES 
