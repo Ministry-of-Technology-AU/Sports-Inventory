@@ -143,6 +143,9 @@
             <label>Student Email:</label>
             <input type="email" id="studentEmail" required />
 
+            <label>Sports Team</label>
+            <input type="text" id="teamName" required />
+
             <label for="equipment">Equipment:</label>
             <select id="equipment" name="equipment" required>
               <option value="" disabled selected>Loading...</option>
@@ -361,6 +364,7 @@
         const requestData = {
           studentName: document.getElementById("studentName").value.trim(),
           studentEmail: document.getElementById("studentEmail").value.trim(),
+          team: document.getElementById("teamName").value.trim(),
           equipment: document.getElementById("equipment").value.trim(),
           quantity: parseInt(document.getElementById("quantity").value, 10),
           endDate: document.getElementById("endDate").value,
@@ -376,7 +380,12 @@
           body: JSON.stringify(requestData),
         })
           .then((res) => res.json())
-          .then((data) => alert(data.message))
+          .then((data) => {
+            alert(data.message);
+            if (data.success) {
+              window.location.reload(); // reload admin page
+            }
+          })
           .catch(() => alert("Something went wrong!"));
       });
   </script>

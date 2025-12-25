@@ -116,7 +116,6 @@
       <% } %> <% if (equipment.length !== 0) { %>
       <div class="bottom">
         <div class="button-group">
-          <button id="returnAllBtn">Return All</button>
           <button id="returnSelectedBtn">Return Selected</button>
         </div>
       </div>
@@ -130,9 +129,7 @@
       let returnInProgress = false;
 
       function disableReturnButtons() {
-        const allBtn = document.getElementById("returnAllBtn");
         const selectedBtn = document.getElementById("returnSelectedBtn");
-        if (allBtn) allBtn.disabled = true;
         if (selectedBtn) selectedBtn.disabled = true;
       }
 
@@ -165,22 +162,6 @@
 
           returnTeamEquipment(selected);
         });
-
-      // Return All
-      document.getElementById("returnAllBtn")?.addEventListener("click", () => {
-        if (!confirm("Are you sure you want to return all team equipment?")) {
-          return;
-        }
-
-        const allEquipment = Array.from(
-          document.querySelectorAll(".equipment-checkbox")
-        ).map((cb) => ({
-          equipment: cb.value,
-          outNum: Number(cb.dataset.quantity),
-        }));
-
-        returnTeamEquipment(allEquipment);
-      });
     </script>
   </body>
 </html>
