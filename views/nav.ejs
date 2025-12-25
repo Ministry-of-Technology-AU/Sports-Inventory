@@ -18,7 +18,7 @@
       <p>Sports MPH</p>
 
       <div class="pages">
-        <% if (config && config === "admin") { %>
+        <% if (isAdmin) { %>
         <a href="/admin" class="<%= activePage === 'admin' ? 'active' : '' %>"
           >Admin</a
         >
