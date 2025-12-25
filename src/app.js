@@ -243,96 +243,76 @@ async function sendOverdueEmail(
       .join("<br>");
 
     // HARDCODED IMAGE IF–ELSE
-// ---------------- IMAGE SELECTION (HARDCODED) ----------------
+    // ---------------- IMAGE SELECTION (HARDCODED) ----------------
 
-  
+    let equipmentImagePath =
+      "https://drive.google.com/uc?export=view&id=10W82tiSEfcINQEy6AAe2jAcBoGGcpyIR"; // general
 
-let equipmentImagePath =
-"https://drive.google.com/uc?export=view&id=10W82tiSEfcINQEy6AAe2jAcBoGGcpyIR"; // general
+    if (equipmentName === "Badminton Racquet") {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=1mJcg3_qUtke7iz9iya5SG-OjvdDpkY0K";
+    } else if (equipmentName === "Basketball") {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=1TrnTTw-rCgoyFkTV7HzaIBs_dIR5FHL6";
+    } else if (equipmentName === "Boxing Gloves") {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=1CYAP4Tx-zrj7ipuTjxRjtpvDn4vAvieg";
+    } else if (
+      equipmentName === "Cricket Bat" ||
+      equipmentName === "Cricket Ball"
+    ) {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=1cJqY8Pfli5oJEcvuBptTmSubFhNo8pws";
+    } else if (equipmentName === "Cycle") {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=1DDy9kjcNDp51V1hXFe21dlPKIh0Ih7Zq";
+    } else if (equipmentName === "Foosball") {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=1dOPtDcBbOMrohMzi14wn725z3HyQRQEd";
+    } else if (equipmentName === "Football") {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=1IGvOHd627ujDZogrenAUmYuOZV6yKRPY";
+    } else if (equipmentName === "Frisbee") {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=1uaG2Um75NRF13Xk3i6bOxGAkx-QNQPpx";
+    } else if (
+      equipmentName === "Pickleball Racquet" ||
+      equipmentName === "Pickleball Ball"
+    ) {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=1oOdOcaQunEyE_medViokQfMRgKXhkEjK";
+    } else if (equipmentName === "Pool Stick") {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=11tlNWOifsVCoivKdDsf6_VoR6MsE7H35";
+    } else if (
+      equipmentName === "Squash Racquet" ||
+      equipmentName === "Squash Ball"
+    ) {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=1XYdjJkYnfGBxaVFnuZR2kqrbHQAAu_Dd";
+    } else if (
+      equipmentName === "Tennis Racquet" ||
+      equipmentName === "Tennis Ball"
+    ) {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=12H1lzn4c46xdejtOz3UvrKcksHjrMUpt";
+    } else if (
+      equipmentName === "Table Tennis Racquet" ||
+      equipmentName === "Table Tennis Ball"
+    ) {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=1zXgG2StDcAg91CmKGbb000-1yw3SvlPr";
+    } else if (equipmentName === "Volleyball") {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=1mQra8FmIARyQ0pObY_Nj_q05yQbH6RFD";
+    } else if (equipmentName === "Yoga Mat") {
+      equipmentImagePath =
+        "https://drive.google.com/uc?export=view&id=1Y9IpuNpn6_li9xsWnGNnUW3FvumusS1h";
+    }
 
-if (equipmentName === "Badminton Racquet") {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=1mJcg3_qUtke7iz9iya5SG-OjvdDpkY0K";
+    // -------------------------------------------------------------
 
-} else if (equipmentName === "Basketball") {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=1TrnTTw-rCgoyFkTV7HzaIBs_dIR5FHL6";
-
-} else if (equipmentName === "Boxing Gloves") {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=1CYAP4Tx-zrj7ipuTjxRjtpvDn4vAvieg";
-
-} else if (
-equipmentName === "Cricket Bat" ||
-equipmentName === "Cricket Ball"
-) {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=1cJqY8Pfli5oJEcvuBptTmSubFhNo8pws";
-
-} else if (equipmentName === "Cycle") {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=1DDy9kjcNDp51V1hXFe21dlPKIh0Ih7Zq";
-
-} else if (equipmentName === "Foosball") {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=1dOPtDcBbOMrohMzi14wn725z3HyQRQEd";
-
-} else if (equipmentName === "Football") {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=1IGvOHd627ujDZogrenAUmYuOZV6yKRPY";
-
-} else if (equipmentName === "Frisbee") {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=1uaG2Um75NRF13Xk3i6bOxGAkx-QNQPpx";
-
-} else if (
-equipmentName === "Pickleball Racquet" ||
-equipmentName === "Pickleball Ball"
-) {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=1oOdOcaQunEyE_medViokQfMRgKXhkEjK";
-
-} else if (equipmentName === "Pool Stick") {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=11tlNWOifsVCoivKdDsf6_VoR6MsE7H35";
-
-} else if (
-equipmentName === "Squash Racquet" ||
-equipmentName === "Squash Ball"
-) {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=1XYdjJkYnfGBxaVFnuZR2kqrbHQAAu_Dd";
-
-} else if (
-equipmentName === "Tennis Racquet" ||
-equipmentName === "Tennis Ball"
-) {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=12H1lzn4c46xdejtOz3UvrKcksHjrMUpt";
-
-} else if (
-equipmentName === "Table Tennis Racquet" ||
-equipmentName === "Table Tennis Ball"
-) {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=1zXgG2StDcAg91CmKGbb000-1yw3SvlPr";
-
-} else if (equipmentName === "Volleyball") {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=1mQra8FmIARyQ0pObY_Nj_q05yQbH6RFD";
-
-} else if (equipmentName === "Yoga Mat") {
-equipmentImagePath =
-  "https://drive.google.com/uc?export=view&id=1Y9IpuNpn6_li9xsWnGNnUW3FvumusS1h";
-}
-
-
-// -------------------------------------------------------------
-
-
-
-    const emailHtml = OVERDUE_TEMPLATE
-      .replace(/{{name}}/g, studentName)
+    const emailHtml = OVERDUE_TEMPLATE.replace(/{{name}}/g, studentName)
       .replace(/{{pendingEquipment}}/g, equipmentList)
       .replace(/{{equipmentImage}}/g, equipmentImagePath);
 
@@ -344,9 +324,7 @@ equipmentImagePath =
     };
 
     const info = await transporter.sendMail(mailOptions);
-    logToFile(
-      `📧 Overdue email sent to ${studentEmail} for ${equipmentName}`
-    );
+    logToFile(`📧 Overdue email sent to ${studentEmail} for ${equipmentName}`);
     return { success: true };
   } catch (error) {
     logToFile(
@@ -1902,11 +1880,25 @@ app.post("/returnMany", async (req, res) => {
 });
 
 app.post("/sports_request", (req, res) => {
-  const { studentEmail, studentName, equipment, quantity, startDate, endDate } =
-    req.body;
+  const {
+    studentEmail,
+    studentName,
+    team,
+    equipment,
+    quantity,
+    startDate,
+    endDate,
+  } = req.body;
 
   // Validation
-  if (!studentEmail || !studentName || !equipment || !quantity || !endDate) {
+  if (
+    !studentEmail ||
+    !studentName ||
+    !team ||
+    !equipment ||
+    !quantity ||
+    !endDate
+  ) {
     return res.status(400).json({
       success: false,
       message: "All fields are required.",
@@ -1922,13 +1914,13 @@ app.post("/sports_request", (req, res) => {
 
   const query = `
     INSERT INTO SportsRequests
-    (studentEmail, studentName, equipment, quantity, startDate, endDate)
-    VALUES (?, ?, ?, ?, ?, ?)
+    (studentEmail, studentName,team, equipment, quantity, startDate, endDate)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `;
 
   db.query(
     query,
-    [studentEmail, studentName, equipment, quantity, startDate, endDate],
+    [studentEmail, studentName, team, equipment, quantity, startDate, endDate],
     (err, result) => {
       if (err) {
         console.error("Error inserting sports request:", err);
