@@ -54,6 +54,8 @@ studentName VARCHAR(100) NOT NULL,
 dueOn DATETIME NOT NULL,
 pending BOOLEAN NOT NULL DEFAULT TRUE,
 returned BOOLEAN NOT NULL DEFAULT FALSE,
+overdue BOOLEAN NOT NULL DEFAULT FALSE,
+overdueEmailSent BOOLEAN NOT NULL DEFAULT FALSE,
 returnedTimestamp DATETIME,
 returnedByID VARCHAR(50) NULL,
 returnedByEmail VARCHAR(100) NULL,
@@ -100,6 +102,11 @@ ADD COLUMN borrowedNotOutstanding INT DEFAULT 0,
 ADD COLUMN borrowedOutstanding INT DEFAULT 0,
 ADD COLUMN offences INT DEFAULT 0,
 ADD COLUMN sportsTeamAuthorised BOOLEAN DEFAULT FALSE;
+
+-- Add overdue tracking columns to existing Logs table (migration)
+ALTER TABLE Logs
+ADD COLUMN overdue BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN overdueEmailSent BOOLEAN NOT NULL DEFAULT FALSE;
 
 INSERT INTO SportsRequests (studentEmail, studentName, equipment, quantity, startDate, endDate, approvedOn, issued)
 VALUES

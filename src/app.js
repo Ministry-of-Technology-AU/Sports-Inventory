@@ -508,55 +508,78 @@ async function sendTeamOverdueEmail(
 }
 
 // ========================================================
-// OVERDUE TRACKING & CRON JOB
+// AUTOMATED OVERDUE TRACKING (WEBHOOK-BASED)
 // ========================================================
 
-// Track when we last sent overdue emails to students (one per day limit)
-const overdueEmailTracker = new Map(); // studentID -> lastEmailDate (YYYY-MM-DD)
+// Configuration: Time threshold for marking items overdue (in hours)
+const OVERDUE_THRESHOLD_HOURS = parseInt(process.env.OVERDUE_THRESHOLD_HOURS || "6", 10);
 
 /**
- * Check for overdue items and send reminder emails
- * Items are overdue if dueOn date has passed (based on dueOn field from schema)
+ * Automatically check and mark items as overdue
+ * Updates database and sends emails for newly overdue items
+ * Triggered via webhook endpoint for instant processing
  */
-async function checkAndNotifyOverdue() {
+async function checkAndMarkOverdueItems() {
   try {
-    logToFile("🔄 Running overdue check...");
+    logToFile(`🔄 Running automated overdue check (threshold: ${OVERDUE_THRESHOLD_HOURS} hours)...`);
 
     const now = moment().tz("Asia/Kolkata");
     const currentTime = now.format("YYYY-MM-DD HH:mm:ss");
-    const today = now.format("YYYY-MM-DD");
+    
+    // Calculate the overdue threshold time (e.g., 6 hours ago)
+    const overdueThreshold = now.clone()
+      .subtract(OVERDUE_THRESHOLD_HOURS, "hours")
+      .format("YYYY-MM-DD HH:mm:ss");
 
-    // Find all logs where equipment is still pending and dueOn date has passed
-    // Using the dueOn field from the schema which is set during issue
-    const overdueQuery = `
+    // Find items that:
+    // 1. Are still pending (not returned)
+    // 2. Were issued more than OVERDUE_THRESHOLD_HOURS ago
+    // 3. Haven't been marked as overdue yet
+    const markOverdueQuery = `
       SELECT 
-        l.studentID,
-        l.studentName,
-        l.studentEmail,
-        l.equipmentBorrowed,
-        l.isTeamIssue,
-        COUNT(*) as quantity,
-        MIN(l.timestamp) as oldestBorrow,
-        MIN(l.dueOn) as earliestDue
-      FROM Logs l
-      WHERE l.pending = TRUE 
-        AND l.returned = FALSE
-        AND l.dueOn < ?
-      GROUP BY l.studentID, l.studentName, l.studentEmail, l.equipmentBorrowed, l.isTeamIssue
+        logID,
+        studentID,
+        studentName,
+        studentEmail,
+        equipmentBorrowed,
+        timestamp,
+        isTeamIssue,
+        TIMESTAMPDIFF(HOUR, timestamp, ?) as hoursElapsed
+      FROM Logs
+      WHERE pending = TRUE 
+        AND returned = FALSE
+        AND overdue = FALSE
+        AND timestamp <= ?
+      ORDER BY timestamp ASC
     `;
 
-    const overdueItems = await db.query(overdueQuery, [currentTime]);
+    const itemsToMarkOverdue = await db.query(markOverdueQuery, [currentTime, overdueThreshold]);
 
-    if (overdueItems.length === 0) {
-      logToFile("   ✅ No overdue items found");
-      return;
+    if (itemsToMarkOverdue.length === 0) {
+      logToFile("   ✅ No new items to mark as overdue");
+      return { success: true, markedOverdue: 0, emailsSent: 0 };
     }
 
-    // Group by student and type (regular vs team)
+    logToFile(`   📊 Found ${itemsToMarkOverdue.length} items to mark as overdue`);
+
+    // Update all these items to overdue status
+    const logIDs = itemsToMarkOverdue.map(item => item.logID);
+    const placeholders = logIDs.map(() => '?').join(',');
+    
+    await db.query(
+      `UPDATE Logs 
+       SET overdue = TRUE 
+       WHERE logID IN (${placeholders})`,
+      logIDs
+    );
+
+    logToFile(`   ✅ Marked ${logIDs.length} items as overdue in database`);
+
+    // Group by student for email notifications
     const studentOverdueMap = new Map();
     const teamOverdueMap = new Map();
 
-    overdueItems.forEach((item) => {
+    itemsToMarkOverdue.forEach((item) => {
       if (item.isTeamIssue) {
         // Team equipment
         if (!teamOverdueMap.has(item.studentID)) {
@@ -564,12 +587,13 @@ async function checkAndNotifyOverdue() {
             studentEmail: item.studentEmail,
             studentName: item.studentName,
             equipment: {},
-            oldestBorrow: item.oldestBorrow,
-            earliestDue: item.earliestDue,
+            oldestTimestamp: item.timestamp,
+            logIDs: []
           });
         }
         const student = teamOverdueMap.get(item.studentID);
-        student.equipment[item.equipmentBorrowed] = item.quantity;
+        student.equipment[item.equipmentBorrowed] = (student.equipment[item.equipmentBorrowed] || 0) + 1;
+        student.logIDs.push(item.logID);
       } else {
         // Regular equipment
         if (!studentOverdueMap.has(item.studentID)) {
@@ -578,29 +602,29 @@ async function checkAndNotifyOverdue() {
             studentName: item.studentName,
             equipment: {},
             primaryEquipment: item.equipmentBorrowed,
+            logIDs: []
           });
         }
         const student = studentOverdueMap.get(item.studentID);
-        student.equipment[item.equipmentBorrowed] = item.quantity;
+        student.equipment[item.equipmentBorrowed] = (student.equipment[item.equipmentBorrowed] || 0) + 1;
+        student.logIDs.push(item.logID);
       }
     });
 
-    logToFile(
-      `   📊 Found ${studentOverdueMap.size} students with overdue equipment`
-    );
-    logToFile(
-      `   📊 Found ${teamOverdueMap.size} teams with overdue equipment`
-    );
+    let emailsSent = 0;
 
-    // Send emails for regular equipment (one per student per day)
+    // Send emails for regular equipment (one per student)
     for (const [studentID, data] of studentOverdueMap.entries()) {
-      const lastEmailDate = overdueEmailTracker.get(studentID);
+      // Check if we already sent email for these specific items
+      const alreadySent = await db.query(
+        `SELECT COUNT(*) as count FROM Logs 
+         WHERE logID IN (${data.logIDs.map(() => '?').join(',')}) 
+         AND overdueEmailSent = TRUE`,
+        data.logIDs
+      );
 
-      // Check if we already sent an email today
-      if (lastEmailDate === today) {
-        logToFile(
-          `   ⏭️  Skipping ${data.studentName} - already emailed today`
-        );
+      if (alreadySent[0].count === data.logIDs.length) {
+        logToFile(`   ⏭️  Skipping ${data.studentName} - email already sent for these items`);
         continue;
       }
 
@@ -613,36 +637,45 @@ async function checkAndNotifyOverdue() {
       );
 
       if (result.success) {
-        // Mark as emailed today
-        overdueEmailTracker.set(studentID, today);
+        // Mark these specific log entries as emailed
+        await db.query(
+          `UPDATE Logs 
+           SET overdueEmailSent = TRUE 
+           WHERE logID IN (${data.logIDs.map(() => '?').join(',')})`,
+          data.logIDs
+        );
+        emailsSent++;
         logToFile(`   ✅ Sent overdue notification to ${data.studentName}`);
       }
     }
 
-    // Send emails for team equipment (one per team captain per day)
+    // Send emails for team equipment
     for (const [studentID, data] of teamOverdueMap.entries()) {
-      const teamKey = `team_${studentID}`;
-      const lastEmailDate = overdueEmailTracker.get(teamKey);
+      // Check if we already sent email for these specific items
+      const alreadySent = await db.query(
+        `SELECT COUNT(*) as count FROM Logs 
+         WHERE logID IN (${data.logIDs.map(() => '?').join(',')}) 
+         AND overdueEmailSent = TRUE`,
+        data.logIDs
+      );
 
-      // Check if we already sent an email today
-      if (lastEmailDate === today) {
-        logToFile(
-          `   ⏭️  Skipping team captain ${data.studentName} - already emailed today`
-        );
+      if (alreadySent[0].count === data.logIDs.length) {
+        logToFile(`   ⏭️  Skipping team captain ${data.studentName} - email already sent`);
         continue;
       }
 
-      // Calculate days overdue
-      const dueDate = moment(data.earliestDue).tz("Asia/Kolkata");
-      const daysOverdue = now.diff(dueDate, "days");
+      // Calculate hours overdue
+      const issueTime = moment(data.oldestTimestamp).tz("Asia/Kolkata");
+      const hoursOverdue = now.diff(issueTime, "hours");
+      const daysOverdue = Math.floor(hoursOverdue / 24);
 
       // Format dates
-      const issueDate = moment(data.oldestBorrow)
-        .tz("Asia/Kolkata")
-        .format("MMMM D, YYYY");
-      const returnDate = dueDate.format("MMMM D, YYYY");
+      const issueDate = issueTime.format("MMMM D, YYYY h:mm A");
+      const expectedReturn = issueTime.clone()
+        .add(OVERDUE_THRESHOLD_HOURS, "hours")
+        .format("MMMM D, YYYY h:mm A");
 
-      const teamName = "Sports Team"; // You may want to pull this from database
+      const teamName = "Sports Team";
       const sportType = Object.keys(data.equipment).join(", ");
 
       // Send team overdue email
@@ -653,23 +686,36 @@ async function checkAndNotifyOverdue() {
         sportType,
         data.equipment,
         issueDate,
-        returnDate,
-        daysOverdue
+        expectedReturn,
+        Math.max(daysOverdue, 1) // At least 1 day for display
       );
 
       if (result.success) {
-        // Mark as emailed today
-        overdueEmailTracker.set(teamKey, today);
-        logToFile(
-          `   ✅ Sent team overdue notification to ${data.studentName}`
+        // Mark these specific log entries as emailed
+        await db.query(
+          `UPDATE Logs 
+           SET overdueEmailSent = TRUE 
+           WHERE logID IN (${data.logIDs.map(() => '?').join(',')})`,
+          data.logIDs
         );
+        emailsSent++;
+        logToFile(`   ✅ Sent team overdue notification to ${data.studentName}`);
       }
     }
 
-    logToFile("🏁 Overdue check complete");
+    logToFile(`🏁 Overdue check complete - Marked: ${logIDs.length}, Emails sent: ${emailsSent}`);
+    
+    return {
+      success: true,
+      markedOverdue: logIDs.length,
+      emailsSent: emailsSent,
+      threshold: `${OVERDUE_THRESHOLD_HOURS} hours`
+    };
+    
   } catch (error) {
     logToFile(`❌ Error in overdue check: ${error.message}`);
     console.error("Overdue check error:", error);
+    return { success: false, error: error.message };
   }
 }
 
@@ -678,17 +724,20 @@ async function checkAndNotifyOverdue() {
 // ========================================================
 
 // ========================================================
-// WEBHOOK FOR INSTANT OVERDUE CHECKING
+// WEBHOOK FOR AUTOMATED OVERDUE CHECKING
 // ========================================================
 
 /**
- * Webhook endpoint to trigger overdue checking instantly
- * Can be called after equipment operations or via external services
- * Optional: Add authentication/API key for production security
+ * Webhook endpoint to trigger instant overdue checking
+ * Automatically marks items overdue after configurable threshold (default: 6 hours)
+ * Can be called:
+ * - After every borrow/return operation
+ * - Via scheduled external service (GitHub Actions, cron services)
+ * - Manually by admins for testing
  */
 app.post("/api/check-overdue", async (req, res) => {
   try {
-    // Optional: Add API key authentication
+    // Optional: Add API key authentication for security
     const apiKey = req.headers["x-api-key"] || req.body.apiKey;
     const expectedKey = process.env.WEBHOOK_API_KEY;
     
@@ -696,19 +745,24 @@ app.post("/api/check-overdue", async (req, res) => {
       logToFile("⚠️ Unauthorized overdue check attempt");
       return res.status(401).json({ 
         success: false, 
-        error: "Unauthorized" 
+        error: "Unauthorized - Invalid API key" 
       });
     }
 
-    logToFile("🔔 Webhook triggered: Starting instant overdue check");
+    logToFile("🔔 Webhook triggered: Starting automated overdue check");
     
-    // Run the overdue check
-    await checkAndNotifyOverdue();
+    // Run the automated overdue check
+    const result = await checkAndMarkOverdueItems();
     
     res.json({ 
-      success: true, 
-      message: "Overdue check completed successfully",
-      timestamp: new Date().toISOString()
+      success: result.success,
+      message: "Automated overdue check completed",
+      timestamp: moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss"),
+      data: {
+        itemsMarkedOverdue: result.markedOverdue || 0,
+        emailsSent: result.emailsSent || 0,
+        overdueThreshold: result.threshold || `${OVERDUE_THRESHOLD_HOURS} hours`
+      }
     });
   } catch (error) {
     logToFile(`❌ Webhook error: ${error.message}`);
@@ -720,11 +774,11 @@ app.post("/api/check-overdue", async (req, res) => {
 });
 
 /**
- * GET endpoint for manual/browser-based triggering (for testing/admin use)
+ * GET endpoint for manual/browser-based triggering (admin use)
  */
 app.get("/api/check-overdue", async (req, res) => {
   try {
-    // Optional: Require admin authentication for GET endpoint
+    // Require admin authentication for GET endpoint
     if (!req.isAuthenticated() || req.user?.role !== "admin") {
       return res.status(403).json({ 
         success: false, 
@@ -733,12 +787,17 @@ app.get("/api/check-overdue", async (req, res) => {
     }
 
     logToFile("🔔 Manual overdue check triggered by admin");
-    await checkAndNotifyOverdue();
+    const result = await checkAndMarkOverdueItems();
     
     res.json({ 
-      success: true, 
-      message: "Overdue check completed successfully",
-      timestamp: new Date().toISOString()
+      success: result.success,
+      message: "Manual overdue check completed",
+      timestamp: moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss"),
+      data: {
+        itemsMarkedOverdue: result.markedOverdue || 0,
+        emailsSent: result.emailsSent || 0,
+        overdueThreshold: result.threshold || `${OVERDUE_THRESHOLD_HOURS} hours`
+      }
     });
   } catch (error) {
     logToFile(`❌ Manual overdue check error: ${error.message}`);
@@ -752,6 +811,28 @@ app.get("/api/check-overdue", async (req, res) => {
 // ========================================================
 // END WEBHOOK
 // ========================================================
+
+/**
+ * Helper function to automatically trigger overdue check
+ * Call this after equipment borrow/return operations
+ * Runs asynchronously without blocking the main operation
+ */
+async function autoTriggerOverdueCheck() {
+  try {
+    // Don't await - fire and forget to avoid blocking
+    setImmediate(async () => {
+      try {
+        logToFile("🔄 Auto-triggering overdue check after equipment operation...");
+        await checkAndMarkOverdueItems();
+      } catch (error) {
+        logToFile(`⚠️ Auto-trigger overdue check failed: ${error.message}`);
+      }
+    });
+  } catch (error) {
+    // Silently fail - don't break the main operation
+    console.error("Error scheduling auto overdue check:", error);
+  }
+}
 
 app.use(
   session({
@@ -1579,6 +1660,9 @@ app.post("/issue", (req, res) => {
                       // Don't block the response on email failure
                     });
 
+                    // Auto-trigger overdue check after successful borrow
+                    autoTriggerOverdueCheck();
+
                     // Render success page with equipment details
                     res.render("success", {
                       studentName: req.session.student.name,
@@ -1711,6 +1795,9 @@ app.post("/issue_team_equipment", requireStudent, async (req, res) => {
       issueDate,
       returnDate
     );
+
+    // Auto-trigger overdue check after successful team borrow
+    autoTriggerOverdueCheck();
 
     res.render("success", {
       ...viewUser(req),
