@@ -9,7 +9,6 @@ import { fileURLToPath } from "url";
 import passport from "./passport-auth.js";
 import MySQLStore from "express-mysql-session";
 import nodemailer from "nodemailer";
-import cron from "node-cron";
 
 console.log("Running");
 const app = express();
@@ -674,27 +673,84 @@ async function checkAndNotifyOverdue() {
   }
 }
 
-// Schedule cron job to run every 12 hours (at 8 AM and 8 PM)
-// Format: "minute hour * * *" where * means every day
-cron.schedule(
-  "0 8,20 * * *",
-  () => {
-    logToFile("⏰ Cron job triggered: Starting overdue check");
-    checkAndNotifyOverdue();
-  },
-  {
-    timezone: "Asia/Kolkata",
-  }
-);
-
-// Run once on startup (after a short delay to let DB initialize)
-setTimeout(() => {
-  logToFile("🚀 Running initial overdue check on startup");
-  checkAndNotifyOverdue();
-}, 5000);
-
 // ========================================================
 // END OVERDUE TRACKING
+// ========================================================
+
+// ========================================================
+// WEBHOOK FOR INSTANT OVERDUE CHECKING
+// ========================================================
+
+/**
+ * Webhook endpoint to trigger overdue checking instantly
+ * Can be called after equipment operations or via external services
+ * Optional: Add authentication/API key for production security
+ */
+app.post("/api/check-overdue", async (req, res) => {
+  try {
+    // Optional: Add API key authentication
+    const apiKey = req.headers["x-api-key"] || req.body.apiKey;
+    const expectedKey = process.env.WEBHOOK_API_KEY;
+    
+    if (expectedKey && apiKey !== expectedKey) {
+      logToFile("⚠️ Unauthorized overdue check attempt");
+      return res.status(401).json({ 
+        success: false, 
+        error: "Unauthorized" 
+      });
+    }
+
+    logToFile("🔔 Webhook triggered: Starting instant overdue check");
+    
+    // Run the overdue check
+    await checkAndNotifyOverdue();
+    
+    res.json({ 
+      success: true, 
+      message: "Overdue check completed successfully",
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logToFile(`❌ Webhook error: ${error.message}`);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+/**
+ * GET endpoint for manual/browser-based triggering (for testing/admin use)
+ */
+app.get("/api/check-overdue", async (req, res) => {
+  try {
+    // Optional: Require admin authentication for GET endpoint
+    if (!req.isAuthenticated() || req.user?.role !== "admin") {
+      return res.status(403).json({ 
+        success: false, 
+        error: "Admin access required" 
+      });
+    }
+
+    logToFile("🔔 Manual overdue check triggered by admin");
+    await checkAndNotifyOverdue();
+    
+    res.json({ 
+      success: true, 
+      message: "Overdue check completed successfully",
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logToFile(`❌ Manual overdue check error: ${error.message}`);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// ========================================================
+// END WEBHOOK
 // ========================================================
 
 app.use(
@@ -736,6 +792,7 @@ app.use((req, res, next) => {
     req.path === "/returnMany" ||
     req.path === "/issue_team_equipment" ||
     req.path === "/return_team_equipment" ||
+    req.path === "/api/check-overdue" || // Webhook endpoint
     // ---------- QR / login endpoints ----------
     req.path === "/issue_login" ||
     req.path === "/issue_login_sports" ||
