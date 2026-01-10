@@ -958,7 +958,8 @@ function ensureAdmin(req, res, next) {
     return next();
   }
   return res.status(403).render("error", {
-    msg: "Forbidden: Admin access only",
+    errorMsg: "Forbidden: Admin access only",
+    ...viewUser(req),
   });
 }
 
