@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Login</title>
+    <title>Statistics Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
@@ -12,28 +12,201 @@
     <link rel="stylesheet" href="/style/global.css" />
     <link rel="stylesheet" href="/style/index.css" />
     <link rel="stylesheet" href="/style/admin.css" />
+    <link rel="stylesheet" href="/style/statistics.css" />
     <script src="https://kit.fontawesome.com/2cacd0cbd0.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 
 <body>
     <%- include("nav",{ activePage: "statistics" , config:"admin", userName: user }) %>
-        <div class="body-wrapper">
-            <div class="actions-menu">
-                <h1>Actions</h1>
-                <li class="actions-buttons-list">
-                    <span><i class="fa-solid fa-square-poll-vertical"></i> <button type="button">Most
-                            Borrowed</button></span>
-                    <span><i class="fa-solid fa-ban"></i> <button type="button">Most Frequently Run
-                            Out</button></span>
-                    <span><i class="fa-solid fa-clock"></i><button type="button">Borrowing
-                            Durations</button></span>
-                </li>
-            </div>
-            <div class="content-box">
-                <!-- You can put whatever you want here later -->
-            </div>
+    
+    <div class="body-wrapper">
+        <div class="actions-menu">
+            <h1>Statistics</h1>
+            <li class="actions-buttons-list">
+                <span><i class="fa-solid fa-chart-line"></i> 
+                    <button type="button" onclick="scrollToSection('overview')">Overview</button>
+                </span>
+                <span><i class="fa-solid fa-ranking-star"></i> 
+                    <button type="button" onclick="scrollToSection('most-borrowed')">Most Borrowed</button>
+                </span>
+                <span><i class="fa-solid fa-gauge-high"></i>
+                    <button type="button" onclick="scrollToSection('utilization')">Utilization Rates</button>
+                </span>
+                <span><i class="fa-solid fa-clock"></i>
+                    <button type="button" onclick="scrollToSection('duration')">Borrowing Duration</button>
+                </span>
+                <span><i class="fa-solid fa-users"></i>
+                    <button type="button" onclick="scrollToSection('top-borrowers')">Top Borrowers</button>
+                </span>
+                <span><i class="fa-solid fa-calendar-days"></i>
+                    <button type="button" onclick="scrollToSection('trends')">Monthly Trends</button>
+                </span>
+            </li>
         </div>
+        
+        <div class="content-box">
+            <button class="refresh-button" onclick="loadStatistics()">
+                <i class="fa-solid fa-rotate"></i> Refresh Data
+            </button>
 
+            <div id="loading" class="loading-spinner">
+                <div class="spinner"></div>
+                <p>Loading statistics...</p>
+            </div>
+
+            <div id="statistics-content" style="display: none;">
+                <!-- Overview Stats Cards -->
+                <section id="overview">
+                    <h2 style="color: var(--secondary-color); margin-bottom: 20px;">
+                        <i class="fa-solid fa-chart-pie"></i> Overview
+                    </h2>
+                    <div class="stats-grid">
+                        <div class="stat-card primary">
+                            <div class="stat-icon"><i class="fa-solid fa-box"></i></div>
+                            <h3>Total Items Issued</h3>
+                            <div class="stat-value" id="total-issued">0</div>
+                            <div class="stat-label">All time</div>
+                        </div>
+                        <div class="stat-card success">
+                            <div class="stat-icon"><i class="fa-solid fa-check-circle"></i></div>
+                            <h3>Total Returned</h3>
+                            <div class="stat-value" id="total-returned">0</div>
+                            <div class="stat-label">Completed transactions</div>
+                        </div>
+                        <div class="stat-card warning">
+                            <div class="stat-icon"><i class="fa-solid fa-hourglass-half"></i></div>
+                            <h3>Currently Pending</h3>
+                            <div class="stat-value" id="total-pending">0</div>
+                            <div class="stat-label">Active borrowings</div>
+                        </div>
+                        <div class="stat-card danger">
+                            <div class="stat-icon"><i class="fa-solid fa-exclamation-triangle"></i></div>
+                            <h3>Overdue Items</h3>
+                            <div class="stat-value" id="total-overdue">0</div>
+                            <div class="stat-label">Need attention</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, #8e44ad 0%, #6c3483 100%);">
+                            <div class="stat-icon"><i class="fa-solid fa-wrench"></i></div>
+                            <h3>Damaged Equipment</h3>
+                            <div class="stat-value" id="total-damaged">0</div>
+                            <div class="stat-label">Needs repair</div>
+                        </div>
+                        <div class="stat-card" style="background: linear-gradient(135deg, #16a085 0%, #138d75 100%);">
+                            <div class="stat-icon"><i class="fa-solid fa-percentage"></i></div>
+                            <h3>Return Rate</h3>
+                            <div class="stat-value" id="return-rate">0%</div>
+                            <div class="stat-label">Overall performance</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Most Borrowed Equipment -->
+                <section id="most-borrowed">
+                    <div class="chart-container">
+                        <h2><i class="fa-solid fa-trophy"></i> Most Borrowed Equipment</h2>
+                        <div class="chart-wrapper">
+                            <canvas id="most-borrowed-chart"></canvas>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Equipment Utilization -->
+                <section id="utilization">
+                    <div class="table-container">
+                        <h2><i class="fa-solid fa-gauge-high"></i> Equipment Utilization Rates</h2>
+                        <table class="stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Equipment</th>
+                                    <th>Total Stock</th>
+                                    <th>In Use</th>
+                                    <th>Available</th>
+                                    <th>Utilization</th>
+                                </tr>
+                            </thead>
+                            <tbody id="utilization-table-body">
+                                <!-- Data will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Borrowing Duration -->
+                <section id="duration">
+                    <div class="chart-container">
+                        <h2><i class="fa-solid fa-clock"></i> Average Borrowing Duration</h2>
+                        <div class="chart-wrapper">
+                            <canvas id="duration-chart"></canvas>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Top Borrowers -->
+                <section id="top-borrowers">
+                    <div class="table-container">
+                        <h2><i class="fa-solid fa-users"></i> Top Borrowers</h2>
+                        <table class="stats-table">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Student Name</th>
+                                    <th>Total Borrowed</th>
+                                    <th>Currently Borrowed</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="top-borrowers-table-body">
+                                <!-- Data will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Team vs Individual Stats -->
+                <section id="team-stats">
+                    <div class="two-column-grid">
+                        <div class="chart-container">
+                            <h2><i class="fa-solid fa-people-group"></i> Team vs Individual Issues</h2>
+                            <div class="chart-wrapper">
+                                <canvas id="team-chart"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <h2><i class="fa-solid fa-chart-pie"></i> Return Status Distribution</h2>
+                            <div class="chart-wrapper">
+                                <canvas id="return-status-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Monthly Trends -->
+                <section id="trends">
+                    <div class="chart-container">
+                        <h2><i class="fa-solid fa-calendar-days"></i> Monthly Borrowing Trends (Current Year)</h2>
+                        <div class="chart-wrapper">
+                            <canvas id="monthly-trends-chart"></canvas>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Recent Borrowing Activity -->
+                <section id="recent-activity">
+                    <div class="chart-container">
+                        <h2><i class="fa-solid fa-clock-rotate-left"></i> Recent Borrowing Activity (Last 30 Days)</h2>
+                        <div class="chart-wrapper">
+                            <canvas id="recent-activity-chart"></canvas>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div id="error-container"></div>
+        </div>
+    </div>
+
+    <script src="/style/statistics.js"></script>
 </body>
 
 </html>

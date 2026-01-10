@@ -2328,6 +2328,129 @@ app.get("/statistics", ensureAdmin, (req, res) => {
   });
 });
 
+
+// API endpoint to get statistics data
+app.get("/api/statistics", ensureAdmin, async (req, res) => {
+  try {
+    // Get most borrowed equipment
+    const mostBorrowed = await db.query(`
+      SELECT equipmentBorrowed, COUNT(*) as borrowCount 
+      FROM Logs 
+      GROUP BY equipmentBorrowed 
+      ORDER BY borrowCount DESC 
+      LIMIT 10
+    `);
+
+    // Get equipment that runs out most frequently (based on current in-use vs available)
+    const equipmentStatus = await db.query(`
+      SELECT 
+        equipment,
+        totalQuantity,
+        reservedQuantity,
+        damagedQuantity,
+        inUseQuantity,
+        (totalQuantity - reservedQuantity - damagedQuantity - inUseQuantity) as available,
+        ROUND((inUseQuantity / GREATEST(totalQuantity - reservedQuantity - damagedQuantity, 1)) * 100, 2) as utilizationRate
+      FROM Equipment
+      ORDER BY utilizationRate DESC
+    `);
+
+    // Get borrowing statistics by time period
+    const borrowingTrends = await db.query(`
+      SELECT 
+        DATE(timestamp) as date,
+        COUNT(*) as borrowCount
+      FROM Logs
+      WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      GROUP BY DATE(timestamp)
+      ORDER BY date DESC
+    `);
+
+    // Get return statistics
+    const returnStats = await db.query(`
+      SELECT 
+        COUNT(*) as totalIssued,
+        SUM(CASE WHEN returned = TRUE THEN 1 ELSE 0 END) as totalReturned,
+        SUM(CASE WHEN pending = TRUE THEN 1 ELSE 0 END) as totalPending,
+        SUM(CASE WHEN overdue = TRUE THEN 1 ELSE 0 END) as totalOverdue,
+        SUM(CASE WHEN damaged = 'Yes' THEN 1 ELSE 0 END) as totalDamaged
+      FROM Logs
+    `);
+
+    // Get average borrowing duration
+    const durationStats = await db.query(`
+      SELECT 
+        equipmentBorrowed,
+        AVG(TIMESTAMPDIFF(HOUR, timestamp, returnedTimestamp)) as avgHours,
+        COUNT(*) as returnCount
+      FROM Logs
+      WHERE returned = TRUE AND returnedTimestamp IS NOT NULL
+      GROUP BY equipmentBorrowed
+      ORDER BY returnCount DESC
+      LIMIT 10
+    `);
+
+    // Get top borrowers
+    const topBorrowers = await db.query(`
+      SELECT 
+        studentName,
+        COUNT(*) as borrowCount,
+        SUM(CASE WHEN pending = TRUE THEN 1 ELSE 0 END) as currentlyBorrowed
+      FROM Logs
+      GROUP BY studentID, studentName
+      ORDER BY borrowCount DESC
+      LIMIT 10
+    `);
+
+    // Get team vs individual statistics
+    const teamStats = await db.query(`
+      SELECT 
+        CASE WHEN isTeamIssue = TRUE THEN 'Team' ELSE 'Individual' END as issueType,
+        COUNT(*) as count,
+        SUM(CASE WHEN returned = TRUE THEN 1 ELSE 0 END) as returned,
+        SUM(CASE WHEN overdue = TRUE THEN 1 ELSE 0 END) as overdue
+      FROM Logs
+      GROUP BY isTeamIssue
+    `);
+
+    // Get monthly statistics for the current year
+    const monthlyStats = await db.query(`
+      SELECT 
+        MONTH(timestamp) as month,
+        YEAR(timestamp) as year,
+        COUNT(*) as borrowCount,
+        SUM(CASE WHEN returned = TRUE THEN 1 ELSE 0 END) as returnCount
+      FROM Logs
+      WHERE YEAR(timestamp) = YEAR(NOW())
+      GROUP BY YEAR(timestamp), MONTH(timestamp)
+      ORDER BY month
+    `);
+
+    res.json({
+      success: true,
+      data: {
+        mostBorrowed: mostBorrowed || [],
+        equipmentStatus: equipmentStatus || [],
+        borrowingTrends: borrowingTrends || [],
+        returnStats: returnStats[0] || {
+          totalIssued: 0,
+          totalReturned: 0,
+          totalPending: 0,
+          totalOverdue: 0,
+          totalDamaged: 0
+        },
+        durationStats: durationStats || [],
+        topBorrowers: topBorrowers || [],
+        teamStats: teamStats || [],
+        monthlyStats: monthlyStats || []
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching statistics:", error);
+    res.status(500).json({ success: false, error: "Failed to fetch statistics" });
+  }
+});
+
 app.post("/success", (req, res) => {
   const equipmentArray = req.body.issuedEquipment || [];
 
