@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+    workflow_dispatch:
 
 jobs: 
     test:
@@ -29,4 +30,3 @@ jobs:
       - name: Check code formatting
         run: npx prettier --check .
 
-        
