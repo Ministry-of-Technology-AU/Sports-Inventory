@@ -1,0 +1,32 @@
+name: PR Testing Workflow
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs: 
+    test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: npm install
+      - name: Run tests
+        run: npm run build
+      - name: Run linting
+        run: npm run lint
+      - name: Run security checks
+        run: npm audit 
+      - name: Run type checking
+        run: npx tsc --noEmit
+      - name: Run unit tests
+        run: npm test
+      - name: Check code formatting
+        run: npx prettier --check .
+
+        
