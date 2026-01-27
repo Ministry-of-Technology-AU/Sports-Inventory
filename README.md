@@ -34,7 +34,7 @@ Go to the project directory
 Install dependencies
 
 ```bash
-  npm install mysql2 nodemailer dotenv node-cron moment-timezone
+  npm install 
 ```
 and
 ```bash
@@ -67,4 +67,12 @@ Start the app
 ## Screenshots
 
 ![App Screenshot](https://via.placeholder.com/468x300?text=App+Screenshot+Here)
+
+## Contributors
+
+<a href="https://github.com/Ministry-of-Technology-AU/Sports-Inventory/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Ministry-of-Technology-AU/Sports-Inventory" />
+</a>
+
+Made with [contrib.rocks](https://contrib.rocks).
 

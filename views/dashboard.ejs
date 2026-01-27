@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Login</title>
+    <title>Statistics Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
@@ -12,28 +12,413 @@
     <link rel="stylesheet" href="/style/global.css" />
     <link rel="stylesheet" href="/style/index.css" />
     <link rel="stylesheet" href="/style/admin.css" />
+    <link rel="stylesheet" href="/style/dashboard.css" />
     <script src="https://kit.fontawesome.com/2cacd0cbd0.js" crossorigin="anonymous"></script>
 </head>
 
 <body>
     <%- include("nav",{ activePage: "statistics" , config:"admin", userName: user }) %>
-        <div class="body-wrapper">
-            <div class="actions-menu">
-                <h1>Actions</h1>
-                <li class="actions-buttons-list">
-                    <span><i class="fa-solid fa-square-poll-vertical"></i> <button type="button">Most
-                            Borrowed</button></span>
-                    <span><i class="fa-solid fa-ban"></i> <button type="button">Most Frequently Run
-                            Out</button></span>
-                    <span><i class="fa-solid fa-clock"></i><button type="button">Borrowing
-                            Durations</button></span>
-                </li>
+    
+    <div class="body-wrapper">
+        <div class="actions-menu">
+            <h1>Filters</h1>
+            <li class="actions-buttons-list">
+                <span><i class="fa-solid fa-calendar-day"></i> 
+                    <button type="button" class="filter-btn active" data-period="today">Today</button>
+                </span>
+                <span><i class="fa-solid fa-calendar-week"></i> 
+                    <button type="button" class="filter-btn" data-period="week">This Week</button>
+                </span>
+                <span><i class="fa-solid fa-calendar"></i>
+                    <button type="button" class="filter-btn" data-period="month">This Month</button>
+                </span>
+                <span><i class="fa-solid fa-calendar-days"></i>
+                    <button type="button" class="filter-btn" data-period="all">All Time</button>
+                </span>
+            </li>
+        </div>
+        
+        <div class="content-box">
+            <!-- Statistics Overview Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">
+                            <i class="fa-solid fa-box"></i>
+                        </div>
+                        <div>
+                            <div class="stat-title">Total Checkouts</div>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="total-checkouts">-</div>
+                    <div class="stat-subtitle">Equipment borrowed</div>
+                </div>
+
+                <div class="stat-card secondary">
+                    <div class="stat-header">
+                        <div class="stat-icon">
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </div>
+                        <div>
+                            <div class="stat-title">Total Returns</div>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="total-returns">-</div>
+                    <div class="stat-subtitle">Equipment returned</div>
+                </div>
+
+                <div class="stat-card tertiary">
+                    <div class="stat-header">
+                        <div class="stat-icon">
+                            <i class="fa-solid fa-users"></i>
+                        </div>
+                        <div>
+                            <div class="stat-title">Active Users</div>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="active-users">-</div>
+                    <div class="stat-subtitle">Unique borrowers</div>
+                </div>
+
+                <div class="stat-card accent">
+                    <div class="stat-header">
+                        <div class="stat-icon">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                        <div>
+                            <div class="stat-title">Pending Returns</div>
+                        </div>
+                    </div>
+                    <div class="stat-value" id="pending-returns">-</div>
+                    <div class="stat-subtitle">Currently checked out</div>
+                </div>
             </div>
-            <div class="content-box">
-                <!-- You can put whatever you want here later -->
+
+            <!-- Most Borrowed Equipment -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h2 class="chart-title">
+                        <i class="fa-solid fa-trophy" style="color: #ffd700; margin-right: 8px;"></i>
+                        Most Borrowed Equipment
+                    </h2>
+                </div>
+                <div class="data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Equipment</th>
+                                <th>Times Borrowed</th>
+                                <th>Popularity</th>
+                            </tr>
+                        </thead>
+                        <tbody id="most-borrowed-table">
+                            <tr>
+                                <td colspan="4" style="text-align: center; padding: 40px;">
+                                    <div class="loading-spinner"></div>
+                                    <div class="loading-text">Loading data...</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Most Active Borrowers -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h2 class="chart-title">
+                        <i class="fa-solid fa-user-check" style="color: var(--secondary-color); margin-right: 8px;"></i>
+                        Most Active Borrowers
+                    </h2>
+                </div>
+                <div class="data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Name</th>
+                                <th>Ashoka ID</th>
+                                <th>Total Borrows</th>
+                            </tr>
+                        </thead>
+                        <tbody id="active-borrowers-table">
+                            <tr>
+                                <td colspan="4" style="text-align: center; padding: 40px;">
+                                    <div class="loading-spinner"></div>
+                                    <div class="loading-text">Loading data...</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Equipment Currently Out -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h2 class="chart-title">
+                        <i class="fa-solid fa-clock" style="color: var(--primary-color); margin-right: 8px;"></i>
+                        Equipment Currently Checked Out
+                    </h2>
+                </div>
+                <div class="data-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Equipment</th>
+                                <th>Quantity Out</th>
+                                <th>Available</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="equipment-out-table">
+                            <tr>
+                                <td colspan="4" style="text-align: center; padding: 40px;">
+                                    <div class="loading-spinner"></div>
+                                    <div class="loading-text">Loading data...</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
+    </div>
 
+    <script>
+        let currentPeriod = 'today';
+        let autoRefreshInterval = null;
+
+        // Load statistics on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadStatistics();
+            
+            // Auto-refresh every 30 seconds
+            autoRefreshInterval = setInterval(() => {
+                loadStatistics();
+            }, 30000);
+
+            // Add filter button listeners
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    // Remove active class from all buttons
+                    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                    // Add active class to clicked button
+                    this.classList.add('active');
+                    
+                    currentPeriod = this.dataset.period;
+                    loadStatistics();
+                });
+            });
+        });
+        
+        // Clear interval when page is hidden/closed
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+            } else {
+                // Resume auto-refresh when page becomes visible
+                if (!autoRefreshInterval) {
+                    autoRefreshInterval = setInterval(() => {
+                        loadStatistics();
+                    }, 30000);
+                }
+            }
+        });
+
+        async function loadStatistics() {
+            try {
+                console.log('Fetching statistics for period:', currentPeriod);
+                const response = await fetch(`/api/statistics?period=${currentPeriod}`);
+                
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers.get('content-type'));
+                
+                if (!response.ok) {
+                    const text = await response.text();
+                    console.error('Error response:', text);
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const text = await response.text();
+                console.log('Raw response:', text.substring(0, 200));
+                
+                const data = JSON.parse(text);
+                console.log('Received data:', data);
+
+                // Update summary cards
+                document.getElementById('total-checkouts').textContent = data.totalCheckouts || 0;
+                document.getElementById('total-returns').textContent = data.totalReturns || 0;
+                document.getElementById('active-users').textContent = data.activeUsers || 0;
+                document.getElementById('pending-returns').textContent = data.pendingReturns || 0;
+
+                // Update most borrowed equipment
+                updateMostBorrowedTable(data.mostBorrowed || []);
+
+                // Update active borrowers
+                updateActiveBorrowersTable(data.activeBorrowers || []);
+
+                // Update equipment currently out
+                updateEquipmentOutTable(data.equipmentOut || []);
+
+            } catch (error) {
+                console.error('Error loading statistics:', error);
+                console.error('Error details:', error.message);
+                showError();
+            }
+        }
+
+        function updateMostBorrowedTable(data) {
+            const tbody = document.getElementById('most-borrowed-table');
+            
+            if (data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4">
+                            <div class="empty-state">
+                                <i class="fa-solid fa-inbox"></i>
+                                <h3>No Data Available</h3>
+                                <p>No borrowing activity found for this period</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            const maxCount = Math.max(...data.map(item => item.count));
+            
+            tbody.innerHTML = data.map((item, index) => {
+                const rank = index + 1;
+                const percentage = (item.count / maxCount) * 100;
+                let rankClass = 'default';
+                if (rank === 1) rankClass = 'gold';
+                else if (rank === 2) rankClass = 'silver';
+                else if (rank === 3) rankClass = 'bronze';
+
+                return `
+                    <tr>
+                        <td>
+                            <div class="rank-badge ${rankClass}">${rank}</div>
+                        </td>
+                        <td><strong>${item.equipment}</strong></td>
+                        <td>${item.count}</td>
+                        <td>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" style="width: ${percentage}%"></div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updateActiveBorrowersTable(data) {
+            const tbody = document.getElementById('active-borrowers-table');
+            
+            if (data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4">
+                            <div class="empty-state">
+                                <i class="fa-solid fa-user-slash"></i>
+                                <h3>No Active Users</h3>
+                                <p>No borrowing activity found for this period</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = data.map((item, index) => {
+                const rank = index + 1;
+                let rankClass = 'default';
+                if (rank === 1) rankClass = 'gold';
+                else if (rank === 2) rankClass = 'silver';
+                else if (rank === 3) rankClass = 'bronze';
+
+                return `
+                    <tr>
+                        <td>
+                            <div class="rank-badge ${rankClass}">${rank}</div>
+                        </td>
+                        <td>${item.name}</td>
+                        <td>${item.ashokaId}</td>
+                        <td>${item.count}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updateEquipmentOutTable(data) {
+            const tbody = document.getElementById('equipment-out-table');
+            
+            if (data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4">
+                            <div class="empty-state">
+                                <i class="fa-solid fa-check-circle"></i>
+                                <h3>All Equipment Available</h3>
+                                <p>No equipment is currently checked out</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = data.map(item => {
+                const percentageOut = item.total > 0 ? ((item.inUse / item.total) * 100).toFixed(0) : 0;
+                let statusColor = 'var(--tertiary-color)';
+                let statusText = 'Available';
+                
+                if (percentageOut >= 80) {
+                    statusColor = 'var(--primary-color)';
+                    statusText = 'High Demand';
+                } else if (percentageOut >= 50) {
+                    statusColor = '#ff9800';
+                    statusText = 'Moderate';
+                }
+
+                return `
+                    <tr>
+                        <td><strong>${item.equipment}</strong></td>
+                        <td>${item.inUse}</td>
+                        <td>${item.available}</td>
+                        <td>
+                            <span style="color: ${statusColor}; font-weight: 600;">
+                                <i class="fa-solid fa-circle" style="font-size: 8px; margin-right: 6px;"></i>
+                                ${statusText}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function showError() {
+            const tables = ['most-borrowed-table', 'active-borrowers-table', 'equipment-out-table'];
+            tables.forEach(tableId => {
+                document.getElementById(tableId).innerHTML = `
+                    <tr>
+                        <td colspan="4">
+                            <div class="empty-state">
+                                <i class="fa-solid fa-exclamation-triangle"></i>
+                                <h3>Error Loading Data</h3>
+                                <p>Please try refreshing the page</p>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+    </script>
 </body>
 
 </html>
