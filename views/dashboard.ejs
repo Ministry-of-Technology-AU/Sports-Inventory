@@ -209,8 +209,15 @@
 
         async function loadStatistics() {
             try {
+                console.log('Fetching statistics for period:', currentPeriod);
                 const response = await fetch(`/api/statistics?period=${currentPeriod}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
                 const data = await response.json();
+                console.log('Received data:', data);
 
                 // Update summary cards
                 document.getElementById('total-checkouts').textContent = data.totalCheckouts || 0;
@@ -229,6 +236,7 @@
 
             } catch (error) {
                 console.error('Error loading statistics:', error);
+                console.error('Error details:', error.message);
                 showError();
             }
         }

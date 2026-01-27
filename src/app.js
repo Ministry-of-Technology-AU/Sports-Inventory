@@ -957,6 +957,13 @@ function ensureAdmin(req, res, next) {
   if (req.isAuthenticated() && req.user?.role === "admin") {
     return next();
   }
+  // Handle API requests with JSON response
+  if (req.path.startsWith('/api/')) {
+    return res.status(403).json({ 
+      error: "Forbidden: Admin access only" 
+    });
+  }
+  // Handle page requests with HTML error page
   return res.status(403).render("error", {
     msg: "Forbidden: Admin access only",
   });
