@@ -874,6 +874,7 @@ app.use((req, res, next) => {
     req.path === "/issue_team_equipment" ||
     req.path === "/return_team_equipment" ||
     req.path === "/api/check-overdue" || // Webhook endpoint
+    req.path === "/api/statistics" || // Statistics API endpoint
     // ---------- QR / login endpoints ----------
     req.path === "/issue_login" ||
     req.path === "/issue_login_sports" ||
@@ -957,6 +958,13 @@ function ensureAdmin(req, res, next) {
   if (req.isAuthenticated() && req.user?.role === "admin") {
     return next();
   }
+  // Handle API requests with JSON response
+  if (req.path.startsWith('/api/')) {
+    return res.status(403).json({ 
+      error: "Forbidden: Admin access only" 
+    });
+  }
+  // Handle page requests with HTML error page
   return res.status(403).render("error", {
     msg: "Forbidden: Admin access only",
   });
@@ -2318,6 +2326,114 @@ app.get("/admin", ensureAdmin, (req, res) => {
       equipment: equipmentData,
     });
   });
+});
+
+// API endpoint for statistics data
+app.get("/api/statistics", ensureAdmin, async (req, res) => {
+  try {
+    const period = req.query.period || "today";
+    
+    // Determine date filter based on period
+    let dateFilter = "";
+    let returnDateFilter = "";
+    const now = moment().tz("Asia/Kolkata");
+    
+    switch (period) {
+      case "today":
+        dateFilter = `AND DATE(timestamp) = '${now.format("YYYY-MM-DD")}'`;
+        returnDateFilter = `AND DATE(returnedTimestamp) = '${now.format("YYYY-MM-DD")}'`;
+        break;
+      case "week":
+        const weekStart = now.clone().startOf("week").format("YYYY-MM-DD");
+        dateFilter = `AND DATE(timestamp) >= '${weekStart}'`;
+        returnDateFilter = `AND DATE(returnedTimestamp) >= '${weekStart}'`;
+        break;
+      case "month":
+        const monthStart = now.clone().startOf("month").format("YYYY-MM-DD");
+        dateFilter = `AND DATE(timestamp) >= '${monthStart}'`;
+        returnDateFilter = `AND DATE(returnedTimestamp) >= '${monthStart}'`;
+        break;
+      case "all":
+      default:
+        dateFilter = "";
+        returnDateFilter = "";
+        break;
+    }
+
+    console.log(`[Statistics] Fetching data for period: ${period}`);
+
+    // Total checkouts
+    const totalCheckouts = await db.query(
+      `SELECT COUNT(*) as count FROM Logs WHERE 1=1 ${dateFilter}`
+    );
+
+    // Total returns
+    const totalReturns = await db.query(
+      `SELECT COUNT(*) as count FROM Logs WHERE returned = TRUE ${returnDateFilter}`
+    );
+
+    // Active users (unique borrowers)
+    const activeUsers = await db.query(
+      `SELECT COUNT(DISTINCT studentID) as count FROM Logs WHERE 1=1 ${dateFilter}`
+    );
+
+    // Pending returns (currently checked out)
+    const pendingReturns = await db.query(
+      `SELECT COUNT(*) as count FROM Logs WHERE pending = TRUE AND returned = FALSE`
+    );
+
+    // Most borrowed equipment
+    const mostBorrowed = await db.query(
+      `SELECT equipmentBorrowed as equipment, COUNT(*) as count 
+       FROM Logs 
+       WHERE 1=1 ${dateFilter}
+       GROUP BY equipmentBorrowed 
+       ORDER BY count DESC 
+       LIMIT 10`
+    );
+
+    // Most active borrowers
+    const activeBorrowers = await db.query(
+      `SELECT studentName as name, studentID as ashokaId, COUNT(*) as count 
+       FROM Logs 
+       WHERE 1=1 ${dateFilter}
+       GROUP BY studentID, studentName 
+       ORDER BY count DESC 
+       LIMIT 10`
+    );
+
+    // Equipment currently checked out with availability
+    const equipmentOut = await db.query(
+      `SELECT 
+        e.equipment,
+        e.totalQuantity as total,
+        e.inUseQuantity as inUse,
+        (e.totalQuantity - e.reservedQuantity - e.damagedQuantity - e.inUseQuantity) as available
+       FROM Equipment e
+       WHERE e.inUseQuantity > 0
+       ORDER BY e.inUseQuantity DESC`
+    );
+
+    const response = {
+      totalCheckouts: totalCheckouts[0]?.count || 0,
+      totalReturns: totalReturns[0]?.count || 0,
+      activeUsers: activeUsers[0]?.count || 0,
+      pendingReturns: pendingReturns[0]?.count || 0,
+      mostBorrowed: mostBorrowed || [],
+      activeBorrowers: activeBorrowers || [],
+      equipmentOut: equipmentOut || [],
+    };
+
+    console.log(`[Statistics] Response:`, JSON.stringify(response, null, 2));
+    res.json(response);
+  } catch (error) {
+    console.error("Error fetching statistics:", error);
+    console.error("Stack trace:", error.stack);
+    res.status(500).json({ 
+      error: "Failed to fetch statistics",
+      message: error.message 
+    });
+  }
 });
 
 app.get("/statistics", ensureAdmin, (req, res) => {
