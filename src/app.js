@@ -875,6 +875,28 @@ app.use((req, res, next) => {
     req.path === "/return_team_equipment" ||
     req.path === "/api/check-overdue" || // Webhook endpoint
     req.path === "/api/statistics" || // Statistics API endpoint
+    // ---------- QR / login endpoints ----------
+    req.path === "/issue_login" ||
+    req.path === "/issue_login_sports" ||
+    req.path === "/return_login" ||
+    req.path === "/issue_team_login" ||
+    req.path === "/team_return_login" ||
+    // ---------- Public landings ----------
+    req.path === "/landing" ||
+    req.path === "/team_landing"
+  ) {
+    return next();
+  }
+
+  // Admin pages require OAuth authentication
+  const adminPaths = ["/admin", "/statistics", "/dashboard"];
+  if (adminPaths.includes(req.path)) {
+    return ensureAuthenticated(req, res, next);
+  }
+
+  // Student pages (/issue, /landing, etc.) require student session (QR code login)
+  const studentPaths = ["/issue", "/landing", "/team_landing"];
+  if (studentPaths.includes(req.path)) {
     // Allow if user has student session OR is OAuth authenticated
     if (req.session.student || req.isAuthenticated()) {
       return next();
