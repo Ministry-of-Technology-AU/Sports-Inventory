@@ -218,6 +218,7 @@
             if (document.hidden) {
                 if (autoRefreshInterval) {
                     clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
                 }
             } else {
                 // Resume auto-refresh when page becomes visible
