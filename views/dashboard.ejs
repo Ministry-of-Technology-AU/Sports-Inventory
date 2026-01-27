@@ -212,11 +212,19 @@
                 console.log('Fetching statistics for period:', currentPeriod);
                 const response = await fetch(`/api/statistics?period=${currentPeriod}`);
                 
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers.get('content-type'));
+                
                 if (!response.ok) {
+                    const text = await response.text();
+                    console.error('Error response:', text);
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 
-                const data = await response.json();
+                const text = await response.text();
+                console.log('Raw response:', text.substring(0, 200));
+                
+                const data = JSON.parse(text);
                 console.log('Received data:', data);
 
                 // Update summary cards
