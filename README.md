@@ -34,7 +34,7 @@ Go to the project directory
 Install dependencies
 
 ```bash
-  npm install mysql2 nodemailer dotenv node-cron moment-timezone
+  npm install 
 ```
 and
 ```bash
