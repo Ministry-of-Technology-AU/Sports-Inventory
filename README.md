@@ -68,7 +68,7 @@ Start the app
 
 ![App Screenshot](https://via.placeholder.com/468x300?text=App+Screenshot+Here)
 
-## Contributors 
+## Contributors
 
 <a href="https://github.com/Ministry-of-Technology-AU/Sports-Inventory/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=Ministry-of-Technology-AU/Sports-Inventory" />
