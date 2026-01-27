@@ -2327,95 +2327,86 @@ app.get("/api/statistics", ensureAdmin, async (req, res) => {
     
     // Determine date filter based on period
     let dateFilter = "";
+    let returnDateFilter = "";
     const now = moment().tz("Asia/Kolkata");
     
     switch (period) {
       case "today":
-        dateFilter = `AND DATE(timestamp) = DATE('${now.format("YYYY-MM-DD")}')`;
+        dateFilter = `AND DATE(timestamp) = '${now.format("YYYY-MM-DD")}'`;
+        returnDateFilter = `AND DATE(returnedTimestamp) = '${now.format("YYYY-MM-DD")}'`;
         break;
       case "week":
         const weekStart = now.clone().startOf("week").format("YYYY-MM-DD");
         dateFilter = `AND DATE(timestamp) >= '${weekStart}'`;
+        returnDateFilter = `AND DATE(returnedTimestamp) >= '${weekStart}'`;
         break;
       case "month":
         const monthStart = now.clone().startOf("month").format("YYYY-MM-DD");
         dateFilter = `AND DATE(timestamp) >= '${monthStart}'`;
+        returnDateFilter = `AND DATE(returnedTimestamp) >= '${monthStart}'`;
         break;
       case "all":
       default:
         dateFilter = "";
+        returnDateFilter = "";
         break;
     }
 
+    console.log(`[Statistics] Fetching data for period: ${period}`);
+
     // Total checkouts
-    const totalCheckoutsQuery = `
-      SELECT COUNT(*) as count 
-      FROM Logs 
-      WHERE 1=1 ${dateFilter}
-    `;
-    const totalCheckouts = await db.query(totalCheckoutsQuery);
+    const totalCheckouts = await db.query(
+      `SELECT COUNT(*) as count FROM Logs WHERE 1=1 ${dateFilter}`
+    );
 
     // Total returns
-    const totalReturnsQuery = `
-      SELECT COUNT(*) as count 
-      FROM Logs 
-      WHERE returned = TRUE ${dateFilter.replace("timestamp", "returnedTimestamp")}
-    `;
-    const totalReturns = await db.query(totalReturnsQuery);
+    const totalReturns = await db.query(
+      `SELECT COUNT(*) as count FROM Logs WHERE returned = TRUE ${returnDateFilter}`
+    );
 
     // Active users (unique borrowers)
-    const activeUsersQuery = `
-      SELECT COUNT(DISTINCT studentID) as count 
-      FROM Logs 
-      WHERE 1=1 ${dateFilter}
-    `;
-    const activeUsers = await db.query(activeUsersQuery);
+    const activeUsers = await db.query(
+      `SELECT COUNT(DISTINCT studentID) as count FROM Logs WHERE 1=1 ${dateFilter}`
+    );
 
     // Pending returns (currently checked out)
-    const pendingReturnsQuery = `
-      SELECT COUNT(*) as count 
-      FROM Logs 
-      WHERE pending = TRUE AND returned = FALSE
-    `;
-    const pendingReturns = await db.query(pendingReturnsQuery);
+    const pendingReturns = await db.query(
+      `SELECT COUNT(*) as count FROM Logs WHERE pending = TRUE AND returned = FALSE`
+    );
 
     // Most borrowed equipment
-    const mostBorrowedQuery = `
-      SELECT equipmentBorrowed as equipment, COUNT(*) as count 
-      FROM Logs 
-      WHERE 1=1 ${dateFilter}
-      GROUP BY equipmentBorrowed 
-      ORDER BY count DESC 
-      LIMIT 10
-    `;
-    const mostBorrowed = await db.query(mostBorrowedQuery);
+    const mostBorrowed = await db.query(
+      `SELECT equipmentBorrowed as equipment, COUNT(*) as count 
+       FROM Logs 
+       WHERE 1=1 ${dateFilter}
+       GROUP BY equipmentBorrowed 
+       ORDER BY count DESC 
+       LIMIT 10`
+    );
 
     // Most active borrowers
-    const activeBorrowersQuery = `
-      SELECT studentName as name, studentID as ashokaId, COUNT(*) as count 
-      FROM Logs 
-      WHERE 1=1 ${dateFilter}
-      GROUP BY studentID, studentName 
-      ORDER BY count DESC 
-      LIMIT 10
-    `;
-    const activeBorrowers = await db.query(activeBorrowersQuery);
+    const activeBorrowers = await db.query(
+      `SELECT studentName as name, studentID as ashokaId, COUNT(*) as count 
+       FROM Logs 
+       WHERE 1=1 ${dateFilter}
+       GROUP BY studentID, studentName 
+       ORDER BY count DESC 
+       LIMIT 10`
+    );
 
     // Equipment currently checked out with availability
-    const equipmentOutQuery = `
-      SELECT 
+    const equipmentOut = await db.query(
+      `SELECT 
         e.equipment,
         e.totalQuantity as total,
         e.inUseQuantity as inUse,
         (e.totalQuantity - e.reservedQuantity - e.damagedQuantity - e.inUseQuantity) as available
-      FROM Equipment e
-      WHERE e.inUseQuantity > 0
-      ORDER BY e.inUseQuantity DESC
-    `;
-    const equipmentOut = await db.query(equipmentOutQuery);
+       FROM Equipment e
+       WHERE e.inUseQuantity > 0
+       ORDER BY e.inUseQuantity DESC`
+    );
 
-    // Return aggregated data
-    res.json({
+    const response = {
       totalCheckouts: totalCheckouts[0]?.count || 0,
       totalReturns: totalReturns[0]?.count || 0,
       activeUsers: activeUsers[0]?.count || 0,
@@ -2423,9 +2414,13 @@ app.get("/api/statistics", ensureAdmin, async (req, res) => {
       mostBorrowed: mostBorrowed || [],
       activeBorrowers: activeBorrowers || [],
       equipmentOut: equipmentOut || [],
-    });
+    };
+
+    console.log(`[Statistics] Response:`, JSON.stringify(response, null, 2));
+    res.json(response);
   } catch (error) {
     console.error("Error fetching statistics:", error);
+    console.error("Stack trace:", error.stack);
     res.status(500).json({ 
       error: "Failed to fetch statistics",
       message: error.message 
