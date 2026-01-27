@@ -873,6 +873,7 @@ app.use((req, res, next) => {
     req.path === "/returnMany" ||
     req.path === "/issue_team_equipment" ||
     req.path === "/return_team_equipment" ||
+    req.path === "/store-success-data" ||
     req.path === "/api/check-overdue" || // Webhook endpoint
     req.path === "/api/statistics" || // Statistics API endpoint
     // ---------- QR / login endpoints ----------
@@ -883,7 +884,8 @@ app.use((req, res, next) => {
     req.path === "/team_return_login" ||
     // ---------- Public landings ----------
     req.path === "/landing" ||
-    req.path === "/team_landing"
+    req.path === "/team_landing" ||
+    req.path === "/show-success"
   ) {
     return next();
   }
@@ -2440,6 +2442,77 @@ app.get("/statistics", ensureAdmin, (req, res) => {
   res.render("dashboard", {
     activePage: "statistics",
     ...viewUser(req),
+  });
+});
+
+// Store success data in session for later retrieval
+app.post("/store-success-data", (req, res) => {
+  console.log("POST /store-success-data called");
+  console.log("Student session:", req.session.student);
+
+  if (!req.session.student) {
+    console.log("Error: No student session");
+    return res.status(401).json({ success: false, error: "Not logged in" });
+  }
+
+  req.session.successData = {
+    issuedEquipment: req.body.issuedEquipment,
+    name: req.body.name,
+    mode: req.body.mode,
+  };
+
+  console.log("Success data stored:", req.session.successData);
+  res.json({ success: true });
+});
+
+// Render success page from stored session data
+app.get("/show-success", (req, res) => {
+  console.log("GET /show-success called");
+  console.log("Student session:", req.session.student);
+  console.log("Success data:", req.session.successData);
+
+  if (!req.session.student || !req.session.successData) {
+    console.log("Redirecting to /landing - missing student or successData");
+    return res.redirect("/landing");
+  }
+
+  const { issuedEquipment, name, mode } = req.session.successData;
+  const equipmentArray = issuedEquipment || [];
+
+  // Group equipment by name and sum quantities
+  const groupedEquipment = {};
+
+  equipmentArray.forEach((item) => {
+    const equipmentName = item.equipment || item;
+    const quantity = item.outNum || 1;
+
+    if (groupedEquipment[equipmentName]) {
+      groupedEquipment[equipmentName] += quantity;
+    } else {
+      groupedEquipment[equipmentName] = quantity;
+    }
+  });
+
+  // Convert grouped object back to array format
+  const groupedArray = Object.keys(groupedEquipment).map((equipment) => ({
+    equipment: equipment,
+    outNum: groupedEquipment[equipment],
+  }));
+
+  // Clear the success data from session after use
+  delete req.session.successData;
+
+  console.log("Rendering success page with:", {
+    name,
+    mode,
+    equipment: groupedArray,
+  });
+
+  res.render("success", {
+    ...viewUser(req),
+    studentName: name || "Unknown",
+    mode: mode || "returned",
+    equipment: groupedArray,
   });
 });
 

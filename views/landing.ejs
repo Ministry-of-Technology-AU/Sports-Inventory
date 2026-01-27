@@ -196,6 +196,8 @@
               return;
             }
 
+            returnSelectedBtn.disabled = true;
+
             const returnData = selectedCheckboxes.map((cb) => {
               const logID = parseInt(cb.dataset.logid);
               const damagedCheckbox = document.querySelector(
@@ -218,30 +220,52 @@
               });
 
               const data = await res.json();
+              console.log("returnMany response:", data);
 
               if (data.success) {
-                const successRes = await fetch("/success", {
+                // Prepare success data and redirect
+                const successData = {
+                  issuedEquipment: returnData.map((r) => ({
+                    equipment: r.equipment,
+                    outNum: 1,
+                  })),
+                  name: "<%= student.name %>",
+                  mode: "returned",
+                };
+
+                console.log("Storing success data:", successData);
+
+                // Store in session via fetch, then redirect
+                const storeRes = await fetch("/store-success-data", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    issuedEquipment: returnData.map((r) => ({
-                      equipment: r.equipment,
-                      outNum: 1,
-                    })),
-                    name: "<%= student.name %>",
-                    mode: "returned",
-                  }),
+                  body: JSON.stringify(successData),
                 });
 
-                const successHtml = await successRes.text();
-                document.open();
-                document.write(successHtml);
-                document.close();
+                console.log(
+                  "store-success-data response status:",
+                  storeRes.status
+                );
+                const storeData = await storeRes.json();
+                console.log("store-success-data response:", storeData);
+
+                if (storeRes.ok && storeData.success) {
+                  console.log("Redirecting to /show-success");
+                  window.location.href = "/show-success";
+                } else {
+                  throw new Error(
+                    "Failed to prepare success page: " +
+                      (storeData.error || storeRes.statusText)
+                  );
+                }
               } else {
                 alert("Error: " + data.error);
+                returnSelectedBtn.disabled = false;
               }
             } catch (err) {
+              console.error("Error:", err);
               alert("Network error: " + err.message);
+              returnSelectedBtn.disabled = false;
             }
           });
         }
