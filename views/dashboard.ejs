@@ -188,10 +188,16 @@
 
     <script>
         let currentPeriod = 'today';
+        let autoRefreshInterval = null;
 
         // Load statistics on page load
         document.addEventListener('DOMContentLoaded', () => {
             loadStatistics();
+            
+            // Auto-refresh every 30 seconds
+            autoRefreshInterval = setInterval(() => {
+                loadStatistics();
+            }, 30000);
 
             // Add filter button listeners
             document.querySelectorAll('.filter-btn').forEach(btn => {
@@ -205,6 +211,23 @@
                     loadStatistics();
                 });
             });
+        });
+        
+        // Clear interval when page is hidden/closed
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+            } else {
+                // Resume auto-refresh when page becomes visible
+                if (!autoRefreshInterval) {
+                    autoRefreshInterval = setInterval(() => {
+                        loadStatistics();
+                    }, 30000);
+                }
+            }
         });
 
         async function loadStatistics() {
