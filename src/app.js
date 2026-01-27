@@ -2320,6 +2320,119 @@ app.get("/admin", ensureAdmin, (req, res) => {
   });
 });
 
+// API endpoint for statistics data
+app.get("/api/statistics", ensureAdmin, async (req, res) => {
+  try {
+    const period = req.query.period || "today";
+    
+    // Determine date filter based on period
+    let dateFilter = "";
+    const now = moment().tz("Asia/Kolkata");
+    
+    switch (period) {
+      case "today":
+        dateFilter = `AND DATE(timestamp) = DATE('${now.format("YYYY-MM-DD")}')`;
+        break;
+      case "week":
+        const weekStart = now.clone().startOf("week").format("YYYY-MM-DD");
+        dateFilter = `AND DATE(timestamp) >= '${weekStart}'`;
+        break;
+      case "month":
+        const monthStart = now.clone().startOf("month").format("YYYY-MM-DD");
+        dateFilter = `AND DATE(timestamp) >= '${monthStart}'`;
+        break;
+      case "all":
+      default:
+        dateFilter = "";
+        break;
+    }
+
+    // Total checkouts
+    const totalCheckoutsQuery = `
+      SELECT COUNT(*) as count 
+      FROM Logs 
+      WHERE 1=1 ${dateFilter}
+    `;
+    const totalCheckouts = await db.query(totalCheckoutsQuery);
+
+    // Total returns
+    const totalReturnsQuery = `
+      SELECT COUNT(*) as count 
+      FROM Logs 
+      WHERE returned = TRUE ${dateFilter.replace("timestamp", "returnedTimestamp")}
+    `;
+    const totalReturns = await db.query(totalReturnsQuery);
+
+    // Active users (unique borrowers)
+    const activeUsersQuery = `
+      SELECT COUNT(DISTINCT studentID) as count 
+      FROM Logs 
+      WHERE 1=1 ${dateFilter}
+    `;
+    const activeUsers = await db.query(activeUsersQuery);
+
+    // Pending returns (currently checked out)
+    const pendingReturnsQuery = `
+      SELECT COUNT(*) as count 
+      FROM Logs 
+      WHERE pending = TRUE AND returned = FALSE
+    `;
+    const pendingReturns = await db.query(pendingReturnsQuery);
+
+    // Most borrowed equipment
+    const mostBorrowedQuery = `
+      SELECT equipmentBorrowed as equipment, COUNT(*) as count 
+      FROM Logs 
+      WHERE 1=1 ${dateFilter}
+      GROUP BY equipmentBorrowed 
+      ORDER BY count DESC 
+      LIMIT 10
+    `;
+    const mostBorrowed = await db.query(mostBorrowedQuery);
+
+    // Most active borrowers
+    const activeBorrowersQuery = `
+      SELECT studentName as name, studentID as ashokaId, COUNT(*) as count 
+      FROM Logs 
+      WHERE 1=1 ${dateFilter}
+      GROUP BY studentID, studentName 
+      ORDER BY count DESC 
+      LIMIT 10
+    `;
+    const activeBorrowers = await db.query(activeBorrowersQuery);
+
+    // Equipment currently checked out with availability
+    const equipmentOutQuery = `
+      SELECT 
+        e.equipment,
+        e.totalQuantity as total,
+        e.inUseQuantity as inUse,
+        (e.totalQuantity - e.reservedQuantity - e.damagedQuantity - e.inUseQuantity) as available
+      FROM Equipment e
+      WHERE e.inUseQuantity > 0
+      ORDER BY e.inUseQuantity DESC
+    `;
+    const equipmentOut = await db.query(equipmentOutQuery);
+
+    // Return aggregated data
+    res.json({
+      totalCheckouts: totalCheckouts[0]?.count || 0,
+      totalReturns: totalReturns[0]?.count || 0,
+      activeUsers: activeUsers[0]?.count || 0,
+      pendingReturns: pendingReturns[0]?.count || 0,
+      mostBorrowed: mostBorrowed || [],
+      activeBorrowers: activeBorrowers || [],
+      equipmentOut: equipmentOut || [],
+    });
+  } catch (error) {
+    console.error("Error fetching statistics:", error);
+    res.status(500).json({ 
+      error: "Failed to fetch statistics",
+      message: error.message 
+    });
+  }
+});
+
 app.get("/statistics", ensureAdmin, (req, res) => {
   res.render("dashboard", {
     activePage: "statistics",
