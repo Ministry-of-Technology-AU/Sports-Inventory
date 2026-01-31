@@ -511,8 +511,13 @@ async function sendTeamOverdueEmail(
 // AUTOMATED OVERDUE TRACKING (WEBHOOK-BASED)
 // ========================================================
 
-// Configuration: Time threshold for marking items overdue (in hours)
-const OVERDUE_THRESHOLD_HOURS = parseInt(process.env.OVERDUE_THRESHOLD_HOURS || "6", 10);
+// Configuration: Time threshold for marking items overdue
+// Supports decimal values for minute-level testing (e.g., 0.5 = 30 minutes, 0.0167 = 1 minute)
+// Can also use OVERDUE_THRESHOLD_MINUTES for direct minute values
+const OVERDUE_THRESHOLD_HOURS = parseFloat(process.env.OVERDUE_THRESHOLD_HOURS || "6");
+const OVERDUE_THRESHOLD_MINUTES = process.env.OVERDUE_THRESHOLD_MINUTES 
+  ? parseFloat(process.env.OVERDUE_THRESHOLD_MINUTES) 
+  : OVERDUE_THRESHOLD_HOURS * 60;
 
 /**
  * Automatically check and mark items as overdue
@@ -521,19 +526,23 @@ const OVERDUE_THRESHOLD_HOURS = parseInt(process.env.OVERDUE_THRESHOLD_HOURS || 
  */
 async function checkAndMarkOverdueItems() {
   try {
-    logToFile(`🔄 Running automated overdue check (threshold: ${OVERDUE_THRESHOLD_HOURS} hours)...`);
+    // Format threshold for logging (show minutes if less than 1 hour)
+    const thresholdDisplay = OVERDUE_THRESHOLD_MINUTES < 60 
+      ? `${OVERDUE_THRESHOLD_MINUTES} minutes` 
+      : `${OVERDUE_THRESHOLD_HOURS} hours (${OVERDUE_THRESHOLD_MINUTES} minutes)`;
+    logToFile(`🔄 Running automated overdue check (threshold: ${thresholdDisplay})...`);
 
     const now = moment().tz("Asia/Kolkata");
     const currentTime = now.format("YYYY-MM-DD HH:mm:ss");
     
-    // Calculate the overdue threshold time (e.g., 6 hours ago)
+    // Calculate the overdue threshold time using minutes for precision
     const overdueThreshold = now.clone()
-      .subtract(OVERDUE_THRESHOLD_HOURS, "hours")
+      .subtract(OVERDUE_THRESHOLD_MINUTES, "minutes")
       .format("YYYY-MM-DD HH:mm:ss");
 
     // Find items that:
     // 1. Are still pending (not returned)
-    // 2. Were issued more than OVERDUE_THRESHOLD_HOURS ago
+    // 2. Were issued more than threshold minutes ago
     // 3. Haven't been marked as overdue yet
     const markOverdueQuery = `
       SELECT 
@@ -544,7 +553,7 @@ async function checkAndMarkOverdueItems() {
         equipmentBorrowed,
         timestamp,
         isTeamIssue,
-        TIMESTAMPDIFF(HOUR, timestamp, ?) as hoursElapsed
+        TIMESTAMPDIFF(MINUTE, timestamp, ?) as minutesElapsed
       FROM Logs
       WHERE pending = TRUE 
         AND returned = FALSE
@@ -672,7 +681,7 @@ async function checkAndMarkOverdueItems() {
       // Format dates
       const issueDate = issueTime.format("MMMM D, YYYY h:mm A");
       const expectedReturn = issueTime.clone()
-        .add(OVERDUE_THRESHOLD_HOURS, "hours")
+        .add(OVERDUE_THRESHOLD_MINUTES, "minutes")
         .format("MMMM D, YYYY h:mm A");
 
       const teamName = "Sports Team";
@@ -709,7 +718,8 @@ async function checkAndMarkOverdueItems() {
       success: true,
       markedOverdue: logIDs.length,
       emailsSent: emailsSent,
-      threshold: `${OVERDUE_THRESHOLD_HOURS} hours`
+      threshold: thresholdDisplay,
+      thresholdMinutes: OVERDUE_THRESHOLD_MINUTES
     };
     
   } catch (error) {
@@ -761,7 +771,8 @@ app.post("/api/check-overdue", async (req, res) => {
       data: {
         itemsMarkedOverdue: result.markedOverdue || 0,
         emailsSent: result.emailsSent || 0,
-        overdueThreshold: result.threshold || `${OVERDUE_THRESHOLD_HOURS} hours`
+        overdueThreshold: result.threshold,
+        overdueThresholdMinutes: result.thresholdMinutes || OVERDUE_THRESHOLD_MINUTES
       }
     });
   } catch (error) {
@@ -796,7 +807,8 @@ app.get("/api/check-overdue", async (req, res) => {
       data: {
         itemsMarkedOverdue: result.markedOverdue || 0,
         emailsSent: result.emailsSent || 0,
-        overdueThreshold: result.threshold || `${OVERDUE_THRESHOLD_HOURS} hours`
+        overdueThreshold: result.threshold,
+        overdueThresholdMinutes: result.thresholdMinutes || OVERDUE_THRESHOLD_MINUTES
       }
     });
   } catch (error) {
