@@ -12,7 +12,7 @@ Project undertaken by the ministry to digitise the existing sports MPH infrastru
 
 ## More Information
 
-For information on deploying to server, [click here](documentation/INSTRUCTIONS.md)
+For information on deploying to server, [click here](documentation/DEPLOYMENT.md)
 
 For detailed information on the app's features, [click here](documentation/OVERVIEW.md)
 
