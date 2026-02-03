@@ -1161,9 +1161,7 @@ app.set("views", path.join(__dirname, "../views"));
 app.set("view engine", "ejs");
 
 // Fix students.json path
-const students = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "../students.json"), "utf-8")
-);
+
 
 app.get(
   "/auth/google",
@@ -1225,6 +1223,7 @@ const BASE_URL = process.env.BASE_URL;
 app.get("/", (req, res) => {
   res.render("issue_login", {
     activePage: "issue",
+    user: req.user || {},
     ...viewUser(req),
   });
 });
@@ -1235,27 +1234,44 @@ app.get("/issue_login", (req, res) => {
   }
   res.render("issue_login", {
     activePage: "issue",
+    user: req.user,
     ...viewUser(req),
   });
 });
 
 app.post("/issue_login", (req, res) => {
   const ashokaId = req.body.qrString?.trim();
-  const studentData = students.find(
-    (s) => String(s.AshokaId).trim() === ashokaId
-  );
 
-  if (!studentData) return res.status(404).send("Student not found");
-  console.log("Student Data:", studentData);
-  req.session.student = studentData;
-  res.redirect("/issue");
+  db.query(
+    "SELECT studentID, studentName, studentEmail FROM Students WHERE studentID = ?",
+    [ashokaId],
+    (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).send("Database error");
+      }
+      if (results.length === 0) {
+        return res.status(404).send("Student not found");
+      }
+
+      const studentData = {
+        AshokaId: results[0].studentID,
+        name: results[0].studentName,
+        email: results[0].studentEmail
+      };
+
+      console.log("Student Data:", studentData);
+      req.session.student = studentData;
+      res.redirect("/issue");
+    }
+  );
 });
 
 app.post("/issue_login_sports", (req, res) => {
   const ashokaId = req.body.qrString?.trim();
 
   db.query(
-    "SELECT sportsTeamAuthorised FROM Students WHERE studentID = ?",
+    "SELECT studentID, studentName, studentEmail, sportsTeamAuthorised FROM Students WHERE studentID = ?",
     [ashokaId],
     (err, results) => {
       if (err) return res.status(500).send("Database error");
@@ -1268,7 +1284,11 @@ app.post("/issue_login_sports", (req, res) => {
         });
       }
 
-      req.session.student = { AshokaId: ashokaId };
+      req.session.student = {
+        AshokaId: results[0].studentID,
+        name: results[0].studentName,
+        email: results[0].studentEmail
+      };
 
       req.session.save(() => {
         res.redirect("/issue_team");
@@ -1276,6 +1296,7 @@ app.post("/issue_login_sports", (req, res) => {
     }
   );
 });
+
 
 function calculateAvailableEquipment(callback) {
   const query = `
@@ -1476,18 +1497,29 @@ app.get("/team_return", async (req, res) => {
 app.post("/team_return_login", (req, res) => {
   const ashokaId = req.body.qrString?.trim();
 
-  const studentData = students.find(
-    (s) => String(s.AshokaId).trim() === ashokaId
+  db.query(
+    "SELECT studentID, studentName, studentEmail FROM Students WHERE studentID = ?",
+    [ashokaId],
+    (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).send("Database error");
+      }
+      if (results.length === 0) {
+        return res.status(404).send("Student not found");
+      }
+
+      const studentData = {
+        AshokaId: results[0].studentID,
+        name: results[0].studentName,
+        email: results[0].studentEmail
+      };
+
+      req.session.student = studentData;
+      res.redirect("/team_return");
+    }
   );
-
-  if (!studentData) {
-    return res.status(404).send("Student not found");
-  }
-
-  req.session.student = studentData;
-  res.redirect("/team_return");
 });
-
 app.post("/return_team_equipment", requireStudent, async (req, res) => {
   const equipments =
     typeof req.body.equipments === "string"
@@ -2013,14 +2045,29 @@ app.get("/return_login", (req, res) => {
 
 app.post("/return_login", (req, res) => {
   const ashokaId = req.body.qrString?.trim();
-  const studentData = students.find(
-    (s) => String(s.AshokaId).trim() === ashokaId
+
+  db.query(
+    "SELECT studentID, studentName, studentEmail FROM Students WHERE studentID = ?",
+    [ashokaId],
+    (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).send("Database error");
+      }
+      if (results.length === 0) {
+        return res.status(404).send("Student not found");
+      }
+
+      const studentData = {
+        AshokaId: results[0].studentID,
+        name: results[0].studentName,
+        email: results[0].studentEmail
+      };
+
+      req.session.student = studentData;
+      res.redirect("/landing");
+    }
   );
-
-  if (!studentData) return res.status(404).send("Student not found");
-
-  req.session.student = studentData;
-  res.redirect("/landing");
 });
 
 app.get("/landing", (req, res) => {
@@ -2036,46 +2083,61 @@ app.get("/landing", (req, res) => {
 
 app.post("/landing", async (req, res) => {
   const ashokaId = String(req.body.qrString).trim();
-  const studentData = students.find((student) => {
-    return String(student.AshokaId).trim() === String(ashokaId).trim();
-  });
 
-  if (!studentData) {
-    return res.status(404).send("Student not found");
-  }
-  req.session.student = studentData;
-
+  // Fetch student from database
   db.query(
-    `SELECT 
-      logID,
-      studentID, 
-      studentName, 
-      equipmentBorrowed as equipment, 
-      timestamp as outTime, 
-      dueOn,
-      pending, 
-      returned,
-      returnedTimestamp as inTime
-    FROM Logs 
-    WHERE studentID = ? AND pending = TRUE AND returned = FALSE AND isTeamIssue = FALSE`,
+    "SELECT studentID, studentName, studentEmail FROM Students WHERE studentID = ?",
     [ashokaId],
     (err, results) => {
-      if (err) return res.status(500).send("Database error");
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).send("Database error");
+      }
+      if (results.length === 0) {
+        return res.status(404).send("Student not found");
+      }
 
-      results.forEach((r) => {
-        r.outTime = moment(r.outTime)
-          .tz("Asia/Kolkata")
-          .format("ddd DD-MM-YYYY HH:mm:ss");
-        r.dueOn = moment(r.dueOn)
-          .tz("Asia/Kolkata")
-          .format("ddd DD-MM-YYYY HH:mm:ss");
-      });
+      const studentData = {
+        AshokaId: results[0].studentID,
+        name: results[0].studentName,
+        email: results[0].studentEmail
+      };
 
-      res.render("landing", {
-        student: studentData,
-        equipment: results,
-        ...viewUser(req),
-      });
+      req.session.student = studentData;
+
+      db.query(
+        `SELECT
+          logID,
+          studentID,
+          studentName,
+          equipmentBorrowed as equipment,
+          timestamp as outTime,
+          dueOn,
+          pending,
+          returned,
+          returnedTimestamp as inTime
+        FROM Logs
+        WHERE studentID = ? AND pending = TRUE AND returned = FALSE AND isTeamIssue = FALSE`,
+        [ashokaId],
+        (err, results) => {
+          if (err) return res.status(500).send("Database error");
+
+          results.forEach((r) => {
+            r.outTime = moment(r.outTime)
+              .tz("Asia/Kolkata")
+              .format("ddd DD-MM-YYYY HH:mm:ss");
+            r.dueOn = moment(r.dueOn)
+              .tz("Asia/Kolkata")
+              .format("ddd DD-MM-YYYY HH:mm:ss");
+          });
+
+          res.render("landing", {
+            student: studentData,
+            equipment: results,
+            ...viewUser(req),
+          });
+        }
+      );
     }
   );
 });
