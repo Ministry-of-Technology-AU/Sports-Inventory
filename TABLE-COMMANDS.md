@@ -6,21 +6,16 @@ damagedQuantity INT NOT NULL,
 inUseQuantity INT NOT NULL
 );
 
-data insertion:
-
-INSERT INTO Equipment
-(equipment, totalQuantity, reservedQuantity, damagedQuantity, inUseQuantity)
-VALUES
-('Basketball', 50, 10, 2, 15),
-('Football', 40, 5, 1, 12),
-('Badminton Racket', 30, 8, 3, 10),
-('Hockey Stick', 25, 6, 2, 9),
-('Cricket Bat', 35, 12, 4, 14);
 
 CREATE TABLE Students (
-studentID VARCHAR(50) PRIMARY KEY,
-studentName VARCHAR(100) NOT NULL,
-studentEmail VARCHAR(100) UNIQUE NOT NULL
+    studentID VARCHAR(50) PRIMARY KEY,
+    studentName VARCHAR(100) NOT NULL,
+    studentEmail VARCHAR(100) UNIQUE NOT NULL,
+
+    borrowedNotOutstanding INT DEFAULT 0,
+    borrowedOutstanding INT DEFAULT 0,
+    offences INT DEFAULT 0,
+    sportsTeamAuthorised BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE SportsRequests (
@@ -96,20 +91,17 @@ updateDone VARCHAR(255),
 
 );
 
--- Alter Students table to add new columns
-ALTER TABLE Students
-ADD COLUMN borrowedNotOutstanding INT DEFAULT 0,
-ADD COLUMN borrowedOutstanding INT DEFAULT 0,
-ADD COLUMN offences INT DEFAULT 0,
-ADD COLUMN sportsTeamAuthorised BOOLEAN DEFAULT FALSE;
-
--- Add overdue tracking columns to existing Logs table (migration)
-ALTER TABLE Logs
-ADD COLUMN overdue BOOLEAN NOT NULL DEFAULT FALSE,
-ADD COLUMN overdueEmailSent BOOLEAN NOT NULL DEFAULT FALSE;
-
-INSERT INTO SportsRequests (studentEmail, studentName, equipment, quantity, startDate, endDate, approvedOn, issued)
+<!-- DATA INSERTION FOR TESTING -->
+INSERT INTO Equipment
+(equipment, totalQuantity, reservedQuantity, damagedQuantity, inUseQuantity)
 VALUES
-('vaani.goenka_ug2024@ashoka.edu.in', 'Vaani Goenka', 'Badminton Racket', 1, '2025-11-15', '2025-12-15', CURRENT_TIMESTAMP, 0),
-('vaani.goenka_ug2024@ashoka.edu.in', 'Vaani Goenka', 'Basketball', 2, '2025-11-15', '2025-12-15', CURRENT_TIMESTAMP, 0),
-('vaani.goenka_ug2024@ashoka.edu.in', 'Vaani Goenka', 'Football', 1, '2025-11-15', '2025-12-15', CURRENT_TIMESTAMP, 0);
+('Basketball', 50, 10, 2, 15),
+('Football', 40, 5, 1, 12),
+('Badminton Racket', 30, 8, 3, 10),
+('Hockey Stick', 25, 6, 2, 9),
+('Cricket Bat', 35, 12, 4, 14);
+
+INSERT INTO students (studentID, studentName, studentEmail) 
+VALUES 
+("1020251823", "Atharvajeet Singh", "atharvajeet.singh_ug2025@ashoka.edu.in")
+("1020251110", "Aditya Kanodia", "aditya.kanodia_ug2025@ashoka.edu.in")

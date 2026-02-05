@@ -55,11 +55,38 @@
         >
           Return
         </a>
-        <span class="username"><%= user %></span>
         <% if (isAuthenticated) { %>
-        <a href="/logout" class="logout-btn">Logout</a>
+        <div class="user-dropdown">
+          <!-- ICON (you will replace this with your own icon) -->
+          <div class="user-icon" id="userToggle">
+            <!-- example placeholder -->
+            <span>👤</span>
+          </div>
+
+          <!-- Dropdown menu -->
+          <div class="dropdown-menu" id="userMenu">
+            <div class="dropdown-username"><%= user %></div>
+            <a href="/logout" class="dropdown-logout">Logout</a>
+          </div>
+        </div>
         <% } %>
       </div>
     </nav>
+    <script>
+      const userToggle = document.getElementById("userToggle");
+      const userMenu = document.getElementById("userMenu");
+
+      userToggle.addEventListener("click", () => {
+        userMenu.classList.toggle("show");
+      });
+
+      // Close dropdown when clicking outside
+      document.addEventListener("click", (e) => {
+        if (!userToggle.contains(e.target) && !userMenu.contains(e.target)) {
+          userMenu.classList.remove("show");
+        }
+      });
+    </script>
+
   </body>
 </html>

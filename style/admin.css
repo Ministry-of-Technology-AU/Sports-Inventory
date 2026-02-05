@@ -38,6 +38,7 @@ i {
 .actions-buttons-list span i {
   margin-right: 14px;
   margin-left: 0;
+  width: 24px;
 }
 
 /* Let the button / link stretch to fill remaining space */
@@ -45,7 +46,7 @@ i {
 .actions-buttons-list span a {
   flex: 1;
   text-align: left;
-}
+} 
 
 .actions-buttons-list {
   display: flex;
@@ -92,12 +93,35 @@ td[contenteditable="true"] {
   /* light blue */
 }
 
-.delete-equipment-btn {
+/* .delete-equipment-btn {
   background-color: #8c99a7;
   margin: auto;
   display: flex;
   justify-content: center;
+} */
+td {
+  vertical-align: middle;   /* ensures the icon stays centered in the cell */
 }
+
+.delete-equipment-btn {
+  background-color: #8c99a7;
+  /* width: 60px;
+  height: 60px; */
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0 auto;           /* horizontal center */
+}
+
+.delete-equipment-btn i {
+  font-size: 24px;
+  color: #c4122f;
+  line-height: 0; 
+}
+
+
 .save-inventory-btn,
 .add-equipment-btn {
   margin-top: 20px;

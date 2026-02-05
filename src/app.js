@@ -508,32 +508,193 @@ async function sendTeamOverdueEmail(
 }
 
 // ========================================================
-// AUTOMATED OVERDUE TRACKING (WEBHOOK-BASED)
+// AUTOMATED OVERDUE TRACKING (SCHEDULED TIMEOUT)
 // ========================================================
 
-// Configuration: Time threshold for marking items overdue (in hours)
-const OVERDUE_THRESHOLD_HOURS = parseInt(process.env.OVERDUE_THRESHOLD_HOURS || "6", 10);
+// Configuration: Time threshold for marking items overdue
+// Supports decimal values for minute-level testing (e.g., 0.5 = 30 minutes, 0.0167 = 1 minute)
+// Can also use OVERDUE_THRESHOLD_MINUTES for direct minute values
+const OVERDUE_THRESHOLD_HOURS = parseFloat(process.env.OVERDUE_THRESHOLD_HOURS || "6");
+const OVERDUE_THRESHOLD_MINUTES = process.env.OVERDUE_THRESHOLD_MINUTES 
+  ? parseFloat(process.env.OVERDUE_THRESHOLD_MINUTES) 
+  : OVERDUE_THRESHOLD_HOURS * 60;
+
+// Store scheduled overdue timeouts (logID -> timeout handle)
+const overdueTimeouts = new Map();
 
 /**
- * Automatically check and mark items as overdue
- * Updates database and sends emails for newly overdue items
- * Triggered via webhook endpoint for instant processing
+ * Schedule an overdue check for a specific log entry at its exact overdue time
+ * @param {number} logID - The log entry ID
+ * @param {Date|string} issueTime - When the item was issued (timestamp)
+ */
+function scheduleOverdueTimeout(logID, issueTime) {
+  // Cancel any existing timeout for this logID
+  if (overdueTimeouts.has(logID)) {
+    clearTimeout(overdueTimeouts.get(logID));
+    overdueTimeouts.delete(logID);
+  }
+
+  const issueMoment = moment(issueTime).tz("Asia/Kolkata");
+  const overdueTime = issueMoment.clone().add(OVERDUE_THRESHOLD_MINUTES, "minutes");
+  const now = moment().tz("Asia/Kolkata");
+  const msUntilOverdue = overdueTime.diff(now);
+
+  // Format for logging
+  const thresholdDisplay = OVERDUE_THRESHOLD_MINUTES < 60 
+    ? `${OVERDUE_THRESHOLD_MINUTES} minutes` 
+    : `${OVERDUE_THRESHOLD_HOURS} hours`;
+
+  if (msUntilOverdue <= 0) {
+    // Already past overdue time - trigger immediately
+    logToFile(`⏰ Log #${logID}: Already past overdue time (threshold: ${thresholdDisplay}), processing now...`);
+    setImmediate(() => processOverdueItem(logID));
+  } else {
+    // Schedule for exact overdue time
+    const timeDisplay = msUntilOverdue < 60000 
+      ? `${Math.round(msUntilOverdue / 1000)} seconds`
+      : `${Math.round(msUntilOverdue / 60000)} minutes`;
+    logToFile(`⏰ Log #${logID}: Scheduled overdue check in ${timeDisplay} (at ${overdueTime.format("h:mm:ss A")})`);
+    
+    const timeoutHandle = setTimeout(() => {
+      overdueTimeouts.delete(logID);
+      processOverdueItem(logID);
+    }, msUntilOverdue);
+    
+    overdueTimeouts.set(logID, timeoutHandle);
+  }
+}
+
+/**
+ * Cancel a scheduled overdue timeout (e.g., when item is returned)
+ * @param {number} logID - The log entry ID
+ */
+function cancelOverdueTimeout(logID) {
+  if (overdueTimeouts.has(logID)) {
+    clearTimeout(overdueTimeouts.get(logID));
+    overdueTimeouts.delete(logID);
+    logToFile(`✅ Log #${logID}: Overdue timeout cancelled (item returned)`);
+  }
+}
+
+/**
+ * Process a single item that has become overdue
+ * @param {number} logID - The log entry ID to mark as overdue
+ */
+async function processOverdueItem(logID) {
+  try {
+    // Get the log entry details
+    const items = await db.query(
+      `SELECT logID, studentID, studentName, studentEmail, equipmentBorrowed, timestamp, isTeamIssue, pending, returned, overdue
+       FROM Logs WHERE logID = ?`,
+      [logID]
+    );
+
+    if (items.length === 0) {
+      logToFile(`⚠️ Log #${logID}: Not found in database`);
+      return;
+    }
+
+    const item = items[0];
+
+    // Check if item is still pending and not already overdue
+    if (!item.pending || item.returned || item.overdue) {
+      logToFile(`⏭️ Log #${logID}: Skipped (pending=${item.pending}, returned=${item.returned}, overdue=${item.overdue})`);
+      return;
+    }
+
+    // Mark as overdue
+    await db.query(`UPDATE Logs SET overdue = TRUE WHERE logID = ?`, [logID]);
+    logToFile(`🔴 Log #${logID}: Marked as OVERDUE - ${item.equipmentBorrowed} borrowed by ${item.studentName}`);
+
+    // Send overdue email
+    const equipment = { [item.equipmentBorrowed]: 1 };
+    
+    if (item.isTeamIssue) {
+      const issueTime = moment(item.timestamp).tz("Asia/Kolkata");
+      const issueDate = issueTime.format("MMMM D, YYYY h:mm A");
+      const expectedReturn = issueTime.clone().add(OVERDUE_THRESHOLD_MINUTES, "minutes").format("MMMM D, YYYY h:mm A");
+      
+      await sendTeamOverdueEmail(
+        item.studentEmail,
+        item.studentName,
+        "Sports Team",
+        item.equipmentBorrowed,
+        equipment,
+        issueDate,
+        expectedReturn,
+        1
+      );
+    } else {
+      await sendOverdueEmail(
+        item.studentEmail,
+        item.studentName,
+        equipment,
+        item.equipmentBorrowed
+      );
+    }
+
+    // Mark email as sent
+    await db.query(`UPDATE Logs SET overdueEmailSent = TRUE WHERE logID = ?`, [logID]);
+    logToFile(`📧 Log #${logID}: Overdue email sent to ${item.studentEmail}`);
+
+  } catch (error) {
+    logToFile(`❌ Log #${logID}: Error processing overdue - ${error.message}`);
+  }
+}
+
+/**
+ * Reschedule overdue timeouts for all pending items on server startup
+ */
+async function rescheduleAllOverdueTimeouts() {
+  try {
+    logToFile("🔄 Rescheduling overdue timeouts for all pending items...");
+    
+    const pendingItems = await db.query(
+      `SELECT logID, timestamp FROM Logs 
+       WHERE pending = TRUE AND returned = FALSE AND overdue = FALSE`
+    );
+
+    if (pendingItems.length === 0) {
+      logToFile("   ✅ No pending items to schedule");
+      return;
+    }
+
+    logToFile(`   📊 Found ${pendingItems.length} pending items`);
+    
+    for (const item of pendingItems) {
+      scheduleOverdueTimeout(item.logID, item.timestamp);
+    }
+
+    logToFile(`   ✅ Scheduled ${pendingItems.length} overdue timeouts`);
+  } catch (error) {
+    logToFile(`❌ Error rescheduling overdue timeouts: ${error.message}`);
+  }
+}
+
+/**
+ * Batch check and mark all overdue items (for manual/webhook triggering)
+ * Note: Individual items are now auto-scheduled via setTimeout on issue
+ * This function is kept for manual admin checks and catching any missed items
  */
 async function checkAndMarkOverdueItems() {
   try {
-    logToFile(`🔄 Running automated overdue check (threshold: ${OVERDUE_THRESHOLD_HOURS} hours)...`);
+    // Format threshold for logging (show minutes if less than 1 hour)
+    const thresholdDisplay = OVERDUE_THRESHOLD_MINUTES < 60 
+      ? `${OVERDUE_THRESHOLD_MINUTES} minutes` 
+      : `${OVERDUE_THRESHOLD_HOURS} hours (${OVERDUE_THRESHOLD_MINUTES} minutes)`;
+    logToFile(`🔄 Running automated overdue check (threshold: ${thresholdDisplay})...`);
 
     const now = moment().tz("Asia/Kolkata");
     const currentTime = now.format("YYYY-MM-DD HH:mm:ss");
     
-    // Calculate the overdue threshold time (e.g., 6 hours ago)
+    // Calculate the overdue threshold time using minutes for precision
     const overdueThreshold = now.clone()
-      .subtract(OVERDUE_THRESHOLD_HOURS, "hours")
+      .subtract(OVERDUE_THRESHOLD_MINUTES, "minutes")
       .format("YYYY-MM-DD HH:mm:ss");
 
     // Find items that:
     // 1. Are still pending (not returned)
-    // 2. Were issued more than OVERDUE_THRESHOLD_HOURS ago
+    // 2. Were issued more than threshold minutes ago
     // 3. Haven't been marked as overdue yet
     const markOverdueQuery = `
       SELECT 
@@ -544,7 +705,7 @@ async function checkAndMarkOverdueItems() {
         equipmentBorrowed,
         timestamp,
         isTeamIssue,
-        TIMESTAMPDIFF(HOUR, timestamp, ?) as hoursElapsed
+        TIMESTAMPDIFF(MINUTE, timestamp, ?) as minutesElapsed
       FROM Logs
       WHERE pending = TRUE 
         AND returned = FALSE
@@ -672,7 +833,7 @@ async function checkAndMarkOverdueItems() {
       // Format dates
       const issueDate = issueTime.format("MMMM D, YYYY h:mm A");
       const expectedReturn = issueTime.clone()
-        .add(OVERDUE_THRESHOLD_HOURS, "hours")
+        .add(OVERDUE_THRESHOLD_MINUTES, "minutes")
         .format("MMMM D, YYYY h:mm A");
 
       const teamName = "Sports Team";
@@ -709,7 +870,8 @@ async function checkAndMarkOverdueItems() {
       success: true,
       markedOverdue: logIDs.length,
       emailsSent: emailsSent,
-      threshold: `${OVERDUE_THRESHOLD_HOURS} hours`
+      threshold: thresholdDisplay,
+      thresholdMinutes: OVERDUE_THRESHOLD_MINUTES
     };
     
   } catch (error) {
@@ -761,7 +923,8 @@ app.post("/api/check-overdue", async (req, res) => {
       data: {
         itemsMarkedOverdue: result.markedOverdue || 0,
         emailsSent: result.emailsSent || 0,
-        overdueThreshold: result.threshold || `${OVERDUE_THRESHOLD_HOURS} hours`
+        overdueThreshold: result.threshold,
+        overdueThresholdMinutes: result.thresholdMinutes || OVERDUE_THRESHOLD_MINUTES
       }
     });
   } catch (error) {
@@ -796,7 +959,8 @@ app.get("/api/check-overdue", async (req, res) => {
       data: {
         itemsMarkedOverdue: result.markedOverdue || 0,
         emailsSent: result.emailsSent || 0,
-        overdueThreshold: result.threshold || `${OVERDUE_THRESHOLD_HOURS} hours`
+        overdueThreshold: result.threshold,
+        overdueThresholdMinutes: result.thresholdMinutes || OVERDUE_THRESHOLD_MINUTES
       }
     });
   } catch (error) {
@@ -813,25 +977,38 @@ app.get("/api/check-overdue", async (req, res) => {
 // ========================================================
 
 /**
- * Helper function to automatically trigger overdue check
- * Call this after equipment borrow/return operations
- * Runs asynchronously without blocking the main operation
+ * Schedule overdue timeouts for recently issued items
+ * Call this after equipment borrow operations
+ * Fetches the most recent log entries and schedules timeouts for them
  */
-async function autoTriggerOverdueCheck() {
+async function scheduleOverdueForRecentIssues(studentID) {
   try {
-    // Don't await - fire and forget to avoid blocking
-    setImmediate(async () => {
-      try {
-        logToFile("🔄 Auto-triggering overdue check after equipment operation...");
-        await checkAndMarkOverdueItems();
-      } catch (error) {
-        logToFile(`⚠️ Auto-trigger overdue check failed: ${error.message}`);
+    // Get recent pending items for this student that don't have scheduled timeouts
+    const recentItems = await db.query(
+      `SELECT logID, timestamp FROM Logs 
+       WHERE studentID = ? 
+         AND pending = TRUE 
+         AND returned = FALSE 
+         AND overdue = FALSE 
+       ORDER BY logID DESC 
+       LIMIT 50`,
+      [studentID]
+    );
+
+    for (const item of recentItems) {
+      if (!overdueTimeouts.has(item.logID)) {
+        scheduleOverdueTimeout(item.logID, item.timestamp);
       }
-    });
+    }
   } catch (error) {
-    // Silently fail - don't break the main operation
-    console.error("Error scheduling auto overdue check:", error);
+    logToFile(`⚠️ Error scheduling overdue for recent issues: ${error.message}`);
   }
+}
+
+// Legacy function for backward compatibility
+async function autoTriggerOverdueCheck() {
+  // Now handled by scheduled timeouts - this is a no-op
+  // Kept for backward compatibility with existing code paths
 }
 
 app.use(
@@ -984,9 +1161,7 @@ app.set("views", path.join(__dirname, "../views"));
 app.set("view engine", "ejs");
 
 // Fix students.json path
-const students = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "../students.json"), "utf-8")
-);
+
 
 app.get(
   "/auth/google",
@@ -1048,6 +1223,7 @@ const BASE_URL = process.env.BASE_URL;
 app.get("/", (req, res) => {
   res.render("issue_login", {
     activePage: "issue",
+    user: req.user || {},
     ...viewUser(req),
   });
 });
@@ -1058,27 +1234,44 @@ app.get("/issue_login", (req, res) => {
   }
   res.render("issue_login", {
     activePage: "issue",
+    user: req.user,
     ...viewUser(req),
   });
 });
 
 app.post("/issue_login", (req, res) => {
   const ashokaId = req.body.qrString?.trim();
-  const studentData = students.find(
-    (s) => String(s.AshokaId).trim() === ashokaId
-  );
 
-  if (!studentData) return res.status(404).send("Student not found");
-  console.log("Student Data:", studentData);
-  req.session.student = studentData;
-  res.redirect("/issue");
+  db.query(
+    "SELECT studentID, studentName, studentEmail FROM Students WHERE studentID = ?",
+    [ashokaId],
+    (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).send("Database error");
+      }
+      if (results.length === 0) {
+        return res.status(404).send("Student not found");
+      }
+
+      const studentData = {
+        AshokaId: results[0].studentID,
+        name: results[0].studentName,
+        email: results[0].studentEmail
+      };
+
+      console.log("Student Data:", studentData);
+      req.session.student = studentData;
+      res.redirect("/issue");
+    }
+  );
 });
 
 app.post("/issue_login_sports", (req, res) => {
   const ashokaId = req.body.qrString?.trim();
 
   db.query(
-    "SELECT sportsTeamAuthorised FROM Students WHERE studentID = ?",
+    "SELECT studentID, studentName, studentEmail, sportsTeamAuthorised FROM Students WHERE studentID = ?",
     [ashokaId],
     (err, results) => {
       if (err) return res.status(500).send("Database error");
@@ -1091,7 +1284,11 @@ app.post("/issue_login_sports", (req, res) => {
         });
       }
 
-      req.session.student = { AshokaId: ashokaId };
+      req.session.student = {
+        AshokaId: results[0].studentID,
+        name: results[0].studentName,
+        email: results[0].studentEmail
+      };
 
       req.session.save(() => {
         res.redirect("/issue_team");
@@ -1099,6 +1296,7 @@ app.post("/issue_login_sports", (req, res) => {
     }
   );
 });
+
 
 function calculateAvailableEquipment(callback) {
   const query = `
@@ -1299,18 +1497,29 @@ app.get("/team_return", async (req, res) => {
 app.post("/team_return_login", (req, res) => {
   const ashokaId = req.body.qrString?.trim();
 
-  const studentData = students.find(
-    (s) => String(s.AshokaId).trim() === ashokaId
+  db.query(
+    "SELECT studentID, studentName, studentEmail FROM Students WHERE studentID = ?",
+    [ashokaId],
+    (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).send("Database error");
+      }
+      if (results.length === 0) {
+        return res.status(404).send("Student not found");
+      }
+
+      const studentData = {
+        AshokaId: results[0].studentID,
+        name: results[0].studentName,
+        email: results[0].studentEmail
+      };
+
+      req.session.student = studentData;
+      res.redirect("/team_return");
+    }
   );
-
-  if (!studentData) {
-    return res.status(404).send("Student not found");
-  }
-
-  req.session.student = studentData;
-  res.redirect("/team_return");
 });
-
 app.post("/return_team_equipment", requireStudent, async (req, res) => {
   const equipments =
     typeof req.body.equipments === "string"
@@ -1356,6 +1565,9 @@ app.post("/return_team_equipment", requireStudent, async (req, res) => {
       }
 
       for (const log of logs) {
+        // Cancel any scheduled overdue timeout for this item
+        cancelOverdueTimeout(log.logID);
+        
         await connection.query(
           `
           UPDATE Logs
@@ -1670,8 +1882,8 @@ app.post("/issue", (req, res) => {
                       // Don't block the response on email failure
                     });
 
-                    // Auto-trigger overdue check after successful borrow
-                    autoTriggerOverdueCheck();
+                    // Schedule overdue timeouts for newly issued items
+                    scheduleOverdueForRecentIssues(req.session.student.AshokaId);
 
                     // Render success page with equipment details
                     res.render("success", {
@@ -1806,8 +2018,8 @@ app.post("/issue_team_equipment", requireStudent, async (req, res) => {
       returnDate
     );
 
-    // Auto-trigger overdue check after successful team borrow
-    autoTriggerOverdueCheck();
+    // Schedule overdue timeouts for newly issued team items
+    scheduleOverdueForRecentIssues(student.AshokaId);
 
     res.render("success", {
       ...viewUser(req),
@@ -1833,14 +2045,29 @@ app.get("/return_login", (req, res) => {
 
 app.post("/return_login", (req, res) => {
   const ashokaId = req.body.qrString?.trim();
-  const studentData = students.find(
-    (s) => String(s.AshokaId).trim() === ashokaId
+
+  db.query(
+    "SELECT studentID, studentName, studentEmail FROM Students WHERE studentID = ?",
+    [ashokaId],
+    (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).send("Database error");
+      }
+      if (results.length === 0) {
+        return res.status(404).send("Student not found");
+      }
+
+      const studentData = {
+        AshokaId: results[0].studentID,
+        name: results[0].studentName,
+        email: results[0].studentEmail
+      };
+
+      req.session.student = studentData;
+      res.redirect("/landing");
+    }
   );
-
-  if (!studentData) return res.status(404).send("Student not found");
-
-  req.session.student = studentData;
-  res.redirect("/landing");
 });
 
 app.get("/landing", (req, res) => {
@@ -1856,46 +2083,61 @@ app.get("/landing", (req, res) => {
 
 app.post("/landing", async (req, res) => {
   const ashokaId = String(req.body.qrString).trim();
-  const studentData = students.find((student) => {
-    return String(student.AshokaId).trim() === String(ashokaId).trim();
-  });
 
-  if (!studentData) {
-    return res.status(404).send("Student not found");
-  }
-  req.session.student = studentData;
-
+  // Fetch student from database
   db.query(
-    `SELECT 
-      logID,
-      studentID, 
-      studentName, 
-      equipmentBorrowed as equipment, 
-      timestamp as outTime, 
-      dueOn,
-      pending, 
-      returned,
-      returnedTimestamp as inTime
-    FROM Logs 
-    WHERE studentID = ? AND pending = TRUE AND returned = FALSE AND isTeamIssue = FALSE`,
+    "SELECT studentID, studentName, studentEmail FROM Students WHERE studentID = ?",
     [ashokaId],
     (err, results) => {
-      if (err) return res.status(500).send("Database error");
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).send("Database error");
+      }
+      if (results.length === 0) {
+        return res.status(404).send("Student not found");
+      }
 
-      results.forEach((r) => {
-        r.outTime = moment(r.outTime)
-          .tz("Asia/Kolkata")
-          .format("ddd DD-MM-YYYY HH:mm:ss");
-        r.dueOn = moment(r.dueOn)
-          .tz("Asia/Kolkata")
-          .format("ddd DD-MM-YYYY HH:mm:ss");
-      });
+      const studentData = {
+        AshokaId: results[0].studentID,
+        name: results[0].studentName,
+        email: results[0].studentEmail
+      };
 
-      res.render("landing", {
-        student: studentData,
-        equipment: results,
-        ...viewUser(req),
-      });
+      req.session.student = studentData;
+
+      db.query(
+        `SELECT
+          logID,
+          studentID,
+          studentName,
+          equipmentBorrowed as equipment,
+          timestamp as outTime,
+          dueOn,
+          pending,
+          returned,
+          returnedTimestamp as inTime
+        FROM Logs
+        WHERE studentID = ? AND pending = TRUE AND returned = FALSE AND isTeamIssue = FALSE`,
+        [ashokaId],
+        (err, results) => {
+          if (err) return res.status(500).send("Database error");
+
+          results.forEach((r) => {
+            r.outTime = moment(r.outTime)
+              .tz("Asia/Kolkata")
+              .format("ddd DD-MM-YYYY HH:mm:ss");
+            r.dueOn = moment(r.dueOn)
+              .tz("Asia/Kolkata")
+              .format("ddd DD-MM-YYYY HH:mm:ss");
+          });
+
+          res.render("landing", {
+            student: studentData,
+            equipment: results,
+            ...viewUser(req),
+          });
+        }
+      );
     }
   );
 });
@@ -1961,6 +2203,9 @@ app.post("/returnMany", async (req, res) => {
           error: `Log entry ${logID} not found or already returned`,
         });
       }
+
+      // Cancel any scheduled overdue timeout for this item
+      cancelOverdueTimeout(logID);
 
       // Mark log as returned
       await connection.query(
@@ -2549,4 +2794,16 @@ app.post("/success", (req, res) => {
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
+  
+  // Format threshold for display
+  const thresholdDisplay = OVERDUE_THRESHOLD_MINUTES < 60 
+    ? `${OVERDUE_THRESHOLD_MINUTES} minutes` 
+    : `${OVERDUE_THRESHOLD_HOURS} hours (${OVERDUE_THRESHOLD_MINUTES} minutes)`;
+  console.log(`⏰ Overdue threshold: ${thresholdDisplay}`);
+  
+  // Reschedule overdue timeouts for pending items on startup
+  setTimeout(async () => {
+    logToFile("🚀 Server started - rescheduling overdue timeouts...");
+    await rescheduleAllOverdueTimeouts();
+  }, 3000); // Wait 3 seconds for DB connection to stabilize
 });
