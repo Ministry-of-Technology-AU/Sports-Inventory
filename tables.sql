@@ -80,3 +80,4 @@ INSERT INTO students (studentID, studentName, studentEmail)
 VALUES 
 ("1020251823", "Atharvajeet Singh", "atharvajeet.singh_ug2025@ashoka.edu.in"),
 ("1020251110", "Aditya Kanodia", "aditya.kanodia_ug2025@ashoka.edu.in");
+("1020251390", "Nitin S", "nitin.s_ug2025@ashoka.edu.in");
