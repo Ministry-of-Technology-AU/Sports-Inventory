@@ -6,12 +6,10 @@ damagedQuantity INT NOT NULL,
 inUseQuantity INT NOT NULL
 );
 
-
 CREATE TABLE Students (
     studentID VARCHAR(50) PRIMARY KEY,
     studentName VARCHAR(100) NOT NULL,
     studentEmail VARCHAR(100) UNIQUE NOT NULL,
-
     borrowedNotOutstanding INT DEFAULT 0,
     borrowedOutstanding INT DEFAULT 0,
     offences INT DEFAULT 0,
@@ -29,16 +27,12 @@ endDate DATE NOT NULL,
 approvedOn TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 issued BOOLEAN DEFAULT FALSE,
 returned BOOLEAN DEFAULT FALSE,
-
     CONSTRAINT fk_student_email FOREIGN KEY (studentEmail)
         REFERENCES Students(studentEmail),
-
     CONSTRAINT fk_equipment FOREIGN KEY (equipment)
         REFERENCES Equipment(equipment)
-
 );
 
--- Create Logs table
 CREATE TABLE Logs (
 logID INT AUTO_INCREMENT PRIMARY KEY,
 timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -63,20 +57,16 @@ CONSTRAINT fk_logs_returned_by_id FOREIGN KEY (returnedByID) REFERENCES Students
 CONSTRAINT fk_logs_returned_by_email FOREIGN KEY (returnedByEmail) REFERENCES Students(studentEmail) ON DELETE SET NULL ON UPDATE CASCADE
 );
 
--- Create EquipmentLogs table
 CREATE TABLE EquipmentLogs (
 logID INT AUTO_INCREMENT PRIMARY KEY,
 itemName VARCHAR(100) NOT NULL,
 timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 totalStockAsOfTimestamp INT NOT NULL,
 updateDone VARCHAR(255),
-
     CONSTRAINT fk_equipment_logs_item FOREIGN KEY (itemName)
         REFERENCES Equipment(equipment)
-
 );
 
-<!-- DATA INSERTION FOR TESTING -->
 INSERT INTO Equipment
 (equipment, totalQuantity, reservedQuantity, damagedQuantity, inUseQuantity)
 VALUES
@@ -89,4 +79,4 @@ VALUES
 INSERT INTO students (studentID, studentName, studentEmail) 
 VALUES 
 ("1020251823", "Atharvajeet Singh", "atharvajeet.singh_ug2025@ashoka.edu.in"),
-("1020251110", "Aditya Kanodia", "aditya.kanodia_ug2025@ashoka.edu.in")
+("1020251110", "Aditya Kanodia", "aditya.kanodia_ug2025@ashoka.edu.in");
