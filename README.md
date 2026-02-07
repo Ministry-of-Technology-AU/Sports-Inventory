@@ -3,40 +3,40 @@
 <h2>View #1: Guard side | while issuing equipment </h2>
 As shown below, the guard can scan the student's ashokaID and then log the student into the system. <br>
 The name and ashokaID will be displayed on the left side <br> <br>
-<img width="1708" alt="Screenshot 2025-02-19 at 12 22 14 AM" src="../images/Screenshot 2026-02-07 115710.png" /> <br> <br>
+<img width="1708" alt="Screenshot 2025-02-19 at 12 22 14 AM" src="./images/Screenshot 2026-02-07 115710.png" /> <br> <br>
 They can now select the equipment that is to be issued along with the quantity to be issued and a summary will be provided of all the selected equipment along with their quantities  <br> <br>
-<img width="1709" alt="Screenshot 2025-02-19 at 12 27 50 AM" src="../images/Screenshot 2026-02-07 120158.png" /><br> <br>
+<img width="1709" alt="Screenshot 2025-02-19 at 12 27 50 AM" src="./images/Screenshot 2026-02-07 120158.png" /><br> <br>
 
 On clicking on issue the equipment will be issued <br>
 A success page will be rendered along with the students name <br> <br>
-<img width="1710" alt="Screenshot 2025-02-19 at 12 24 30 AM" src="../images/Screenshot 2026-02-07 120402.png" /> <br> <br>
+<img width="1710" alt="Screenshot 2025-02-19 at 12 24 30 AM" src="./images/Screenshot 2026-02-07 120402.png" /> <br> <br>
 <br>
 
 <h2>View #2: Guard side | while accepting the returning equipment </h2>
 After the logging in the student similarly to the issuing process, as shown below, the guard will be able to see the receiver's outstanding equipment with each unit item in a separate row along with the option to mark as returned. <br><br>
-<img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="../images/Screenshot 2026-02-07 120546.png" /> <br>  <br>
+<img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="./images/Screenshot 2026-02-07 120546.png" /> <br>  <br>
 On selecting the packages to be given, or selecing the checkbox at the column header, and clicking 'Return Selected', the equipment will be successfully returned. A sucess page will be rendered <br><br>
-<img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="../images/Screenshot 2026-02-07 120705.png" /> <br>  <br>
+<img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="./images/Screenshot 2026-02-07 120705.png" /> <br>  <br>
 
 <h2>View #3: Inventory Status and Update Inventory</h2>
 As shown below, the inventory can be updated through adding new rows abd updating the exisiting values. There is also a button in each row to delete that specfific inventory item. <br><br>
-<img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="../images/Screenshot 2026-02-07 120751.png" /> <br>  <br>
+<img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="./images/Screenshot 2026-02-07 120751.png" /> <br>  <br>
 
 <h2>View #4: Sports Request Creation </h2>
 As shown below, the sports request form that can be used to authorise a student for accessing a specific sports team request and return portal <br><br>
-<img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="../images/Screenshot 2026-02-07 121446.png" /> <br>  <br>
+<img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="./images/Screenshot 2026-02-07 121446.png" /> <br>  <br>
 
 <h2>View #5: Statistics Dashboard </h2>
 As shown below, the statistics dashboard can be used to obtain real-time data analytics regarding the  <br><br>
-<img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="../images/Screenshot 2026-02-07 122209.png" /> <br>  <br>
+<img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="./images/Screenshot 2026-02-07 122209.png" /> <br>  <br>
 
 <h2>View #6: Student Offences </h2>
 As shown below, the offences done by students can be shown in the offences section of the admin page. <br><br>
-<img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="../images/Screenshot 2026-02-07 122407.png" /> <br>  <br>
+<img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="./images/Screenshot 2026-02-07 122407.png" /> <br>  <br>
 
 <h2>View #7: Damaged Equipment </h2>
 As shown below, the equipment that has been returned marked as damaged can be viewed in the damaged equipment section of the admin page<br><br>
-<img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="../images/Screenshot 2026-02-07 122621.png" /> <br>  <br>
+<img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="./images/Screenshot 2026-02-07 122621.png" /> <br>  <br>
 
 <h2>Setup and dependencies: </2><br>
 <h5>How to setup: </h5>
