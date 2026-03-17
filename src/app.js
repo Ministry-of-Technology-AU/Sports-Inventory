@@ -8,7 +8,10 @@ import session from "express-session";
 import { fileURLToPath } from "url";
 import passport from "./passport-auth.js";
 import MySQLStore from "express-mysql-session";
-import nodemailer from "nodemailer";
+import { logToFile } from "./utils/logger.js";
+import { sendBorrowEmail, sendReturnEmail, sendOverdueEmail, sendTeamBorrowEmail, sendTeamReturnEmail, sendTeamOverdueEmail } from "./utils/email.js";
+import { OVERDUE_THRESHOLD_HOURS, OVERDUE_THRESHOLD_MINUTES, scheduleOverdueTimeout, cancelOverdueTimeout, processOverdueItem, rescheduleAllOverdueTimeouts, checkAndMarkOverdueItems, scheduleOverdueForRecentIssues } from "./services/overdue.js";
+import prisma from "./prisma.js";
 
 console.log("Running");
 const app = express();
@@ -24,7 +27,7 @@ app.use("/images", express.static(path.join(__dirname, "../images")));
 
 const port = process.env.PORT || 3000;
 
-// Database connection
+// Raw mysql2 pool - ONLY used for express-mysql-session store
 import { createPool } from "mysql2/promise";
 const pool = createPool({
   host: process.env.DB_HOST,
@@ -35,40 +38,6 @@ const pool = createPool({
   connectionLimit: 10,
   queueLimit: 0,
 });
-
-// Wrapper to support both callback-based and promise-based queries
-const db = {
-  query: (sql, argsOrCallback, callback) => {
-    let args = [];
-    let cb = null;
-
-    // Detect calling pattern
-    if (typeof argsOrCallback === "function") {
-      // Pattern: db.query(sql, callback)
-      args = [];
-      cb = argsOrCallback;
-    } else if (typeof callback === "function") {
-      // Pattern: db.query(sql, args, callback)
-      args = argsOrCallback || [];
-      cb = callback;
-    } else {
-      // Pattern: db.query(sql, args) - expecting a promise
-      args = argsOrCallback || [];
-    }
-
-    const promise = pool.query(sql, args).then(([results]) => results);
-
-    if (cb) {
-      // Callback-based: handle with callback
-      promise
-        .then((results) => cb(null, results))
-        .catch((err) => cb(err, null));
-    } else {
-      // Promise-based: return promise for await
-      return promise;
-    }
-  },
-};
 
 app.set("view engine", "ejs");
 
@@ -92,924 +61,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const sessionStore = new MySQLStoreSession(sessionStoreOptions, pool);
-
-// ========================================================
-// LOGGING SETUP
-// ========================================================
-
-const LOGS_DIR = path.join(__dirname, "../logs");
-if (!fs.existsSync(LOGS_DIR)) fs.mkdirSync(LOGS_DIR, { recursive: true });
-const LOG_FILE = path.join(LOGS_DIR, "app-log.txt");
-
-function logToFile(msg) {
-  const ts = new Date().toISOString();
-  fs.appendFileSync(LOG_FILE, `[${ts}] ${msg}\n`);
-  console.log(msg);
-}
-
-// ========================================================
-// EMAIL SETUP (NODEMAILER)
-// ========================================================
-
-// Create nodemailer transporter
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
-
-// Load email templates
-const BORROW_TEMPLATE = fs.readFileSync(
-  path.join(__dirname, "../templates/borrow.html"),
-  "utf-8"
-);
-const RETURN_TEMPLATE = fs.readFileSync(
-  path.join(__dirname, "../templates/return.html"),
-  "utf-8"
-);
-const OVERDUE_TEMPLATE = fs.readFileSync(
-  path.join(__dirname, "../templates/overdue.html"),
-  "utf-8"
-);
-const TEAM_BORROW_TEMPLATE = fs.readFileSync(
-  path.join(__dirname, "../templates/team-borrow.html"),
-  "utf-8"
-);
-const TEAM_RETURN_TEMPLATE = fs.readFileSync(
-  path.join(__dirname, "../templates/team-return.html"),
-  "utf-8"
-);
-const TEAM_OVERDUE_TEMPLATE = fs.readFileSync(
-  path.join(__dirname, "../templates/team-overdue.html"),
-  "utf-8"
-);
-
-/**
- * Send borrow confirmation email
- * @param {string} studentEmail - Student's email address
- * @param {string} studentName - Student's name
- * @param {object} equipmentCounts - Object mapping equipment name to quantity
- */
-async function sendBorrowEmail(studentEmail, studentName, equipmentCounts) {
-  try {
-    // Format equipment list with each item on a new line (e.g., "Cricket Bat - 2<br>Basketball - 1")
-    const equipmentList = Object.entries(equipmentCounts)
-      .map(([equipment, qty]) => `${equipment} - ${qty}`)
-      .join("<br>");
-
-    // Replace placeholders in template
-    const emailHtml = BORROW_TEMPLATE.replace(/{{name}}/g, studentName).replace(
-      /{{borrowedEquipment}}/g,
-      equipmentList
-    );
-
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: studentEmail,
-      subject: "Sports Equipment Borrowed - Confirmation",
-      html: emailHtml,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    logToFile(
-      `📧 Borrow email sent to ${studentEmail} - MessageID: ${info.messageId}`
-    );
-    return { success: true, messageId: info.messageId };
-  } catch (error) {
-    logToFile(
-      `❌ Failed to send borrow email to ${studentEmail}: ${error.message}`
-    );
-    return { success: false, error: error.message };
-  }
-}
-
-/**
- * Send return confirmation email
- * @param {string} studentEmail - Student's email address
- * @param {string} studentName - Student's name
- * @param {object} equipmentCounts - Object mapping equipment name to quantity
- */
-async function sendReturnEmail(studentEmail, studentName, equipmentCounts) {
-  try {
-    // Format equipment list with each item on a new line (e.g., "Cricket Bat - 2<br>Football - 1")
-    const equipmentList = Object.entries(equipmentCounts)
-      .map(([equipment, qty]) => `${equipment} - ${qty}`)
-      .join("<br>");
-
-    // Replace placeholders in template
-    const emailHtml = RETURN_TEMPLATE.replace(/{{name}}/g, studentName).replace(
-      /{{returnedEquipment}}/g,
-      equipmentList
-    );
-
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: studentEmail,
-      subject: "Sports Equipment Returned - Confirmation",
-      html: emailHtml,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    logToFile(
-      `📧 Return email sent to ${studentEmail} - MessageID: ${info.messageId}`
-    );
-    return { success: true, messageId: info.messageId };
-  } catch (error) {
-    logToFile(
-      `❌ Failed to send return email to ${studentEmail}: ${error.message}`
-    );
-    return { success: false, error: error.message };
-  }
-}
-
-/**
- * Send overdue equipment reminder email
- * @param {string} studentEmail - Student's email address
- * @param {string} studentName - Student's name
- * @param {object} equipmentCounts - Object mapping equipment name to quantity
- */
-async function sendOverdueEmail(
-  studentEmail,
-  studentName,
-  equipmentCounts,
-  equipmentName
-) {
-  try {
-    const equipmentList = Object.entries(equipmentCounts)
-      .map(([equipment, qty]) => `${equipment} - ${qty}`)
-      .join("<br>");
-
-    // HARDCODED IMAGE IF–ELSE
-    // ---------------- IMAGE SELECTION (HARDCODED) ----------------
-
-    let equipmentImagePath =
-      "https://drive.google.com/uc?export=view&id=10W82tiSEfcINQEy6AAe2jAcBoGGcpyIR"; // general
-
-    if (equipmentName === "Badminton Racquet") {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=1mJcg3_qUtke7iz9iya5SG-OjvdDpkY0K";
-    } else if (equipmentName === "Basketball") {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=1TrnTTw-rCgoyFkTV7HzaIBs_dIR5FHL6";
-    } else if (equipmentName === "Boxing Gloves") {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=1CYAP4Tx-zrj7ipuTjxRjtpvDn4vAvieg";
-    } else if (
-      equipmentName === "Cricket Bat" ||
-      equipmentName === "Cricket Ball"
-    ) {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=1cJqY8Pfli5oJEcvuBptTmSubFhNo8pws";
-    } else if (equipmentName === "Cycle") {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=1DDy9kjcNDp51V1hXFe21dlPKIh0Ih7Zq";
-    } else if (equipmentName === "Foosball") {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=1dOPtDcBbOMrohMzi14wn725z3HyQRQEd";
-    } else if (equipmentName === "Football") {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=1IGvOHd627ujDZogrenAUmYuOZV6yKRPY";
-    } else if (equipmentName === "Frisbee") {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=1uaG2Um75NRF13Xk3i6bOxGAkx-QNQPpx";
-    } else if (
-      equipmentName === "Pickleball Racquet" ||
-      equipmentName === "Pickleball Ball"
-    ) {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=1oOdOcaQunEyE_medViokQfMRgKXhkEjK";
-    } else if (equipmentName === "Pool Stick") {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=11tlNWOifsVCoivKdDsf6_VoR6MsE7H35";
-    } else if (
-      equipmentName === "Squash Racquet" ||
-      equipmentName === "Squash Ball"
-    ) {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=1XYdjJkYnfGBxaVFnuZR2kqrbHQAAu_Dd";
-    } else if (
-      equipmentName === "Tennis Racquet" ||
-      equipmentName === "Tennis Ball"
-    ) {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=12H1lzn4c46xdejtOz3UvrKcksHjrMUpt";
-    } else if (
-      equipmentName === "Table Tennis Racquet" ||
-      equipmentName === "Table Tennis Ball"
-    ) {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=1zXgG2StDcAg91CmKGbb000-1yw3SvlPr";
-    } else if (equipmentName === "Volleyball") {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=1mQra8FmIARyQ0pObY_Nj_q05yQbH6RFD";
-    } else if (equipmentName === "Yoga Mat") {
-      equipmentImagePath =
-        "https://drive.google.com/uc?export=view&id=1Y9IpuNpn6_li9xsWnGNnUW3FvumusS1h";
-    }
-
-    // -------------------------------------------------------------
-
-    const emailHtml = OVERDUE_TEMPLATE.replace(/{{name}}/g, studentName)
-      .replace(/{{pendingEquipment}}/g, equipmentList)
-      .replace(/{{equipmentImage}}/g, equipmentImagePath);
-
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: studentEmail,
-      subject: "⚠️ Sports Equipment Overdue - Return Required",
-      html: emailHtml,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    logToFile(`📧 Overdue email sent to ${studentEmail} for ${equipmentName}`);
-    return { success: true };
-  } catch (error) {
-    logToFile(
-      `❌ Failed to send overdue email to ${studentEmail}: ${error.message}`
-    );
-    return { success: false };
-  }
-}
-
-/**
- * Send team borrow confirmation email
- * @param {string} captainEmail - Team captain's email address
- * @param {string} captainName - Team captain's name
- * @param {string} teamName - Team name
- * @param {string} sportType - Sport type
- * @param {object} equipmentCounts - Object mapping equipment name to quantity
- * @param {string} issueDate - Date equipment was issued
- * @param {string} returnDate - Expected return date
- */
-async function sendTeamBorrowEmail(
-  captainEmail,
-  captainName,
-  teamName,
-  sportType,
-  equipmentCounts,
-  issueDate,
-  returnDate
-) {
-  try {
-    // Format equipment list with each item on a new line
-    const equipmentList = Object.entries(equipmentCounts)
-      .map(([equipment, qty]) => `${equipment} - ${qty}`)
-      .join("<br>");
-
-    // Replace placeholders in template
-    const emailHtml = TEAM_BORROW_TEMPLATE.replace(
-      /{{captainName}}/g,
-      captainName
-    )
-      .replace(/{{teamName}}/g, teamName)
-      .replace(/{{sportType}}/g, sportType)
-      .replace(/{{borrowedEquipment}}/g, equipmentList)
-      .replace(/{{issueDate}}/g, issueDate)
-      .replace(/{{returnDate}}/g, returnDate);
-
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: captainEmail,
-      subject: `Team Equipment Borrowed - ${teamName}`,
-      html: emailHtml,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    logToFile(
-      `📧 Team borrow email sent to ${captainEmail} (${teamName}) - MessageID: ${info.messageId}`
-    );
-    return { success: true, messageId: info.messageId };
-  } catch (error) {
-    logToFile(
-      `❌ Failed to send team borrow email to ${captainEmail}: ${error.message}`
-    );
-    return { success: false, error: error.message };
-  }
-}
-
-/**
- * Send team return confirmation email
- * @param {string} captainEmail - Team captain's email address
- * @param {string} captainName - Team captain's name
- * @param {string} teamName - Team name
- * @param {string} sportType - Sport type
- * @param {object} equipmentCounts - Object mapping equipment name to quantity
- * @param {string} issueDate - Original issue date
- * @param {string} returnDate - Date equipment was returned
- * @param {string} equipmentStatus - Status message (e.g., "All equipment in good condition")
- */
-async function sendTeamReturnEmail(
-  captainEmail,
-  captainName,
-  teamName,
-  sportType,
-  equipmentCounts,
-  issueDate,
-  returnDate,
-  equipmentStatus
-) {
-  try {
-    // Format equipment list with each item on a new line
-    const equipmentList = Object.entries(equipmentCounts)
-      .map(([equipment, qty]) => `${equipment} - ${qty}`)
-      .join("<br>");
-
-    // Replace placeholders in template
-    const emailHtml = TEAM_RETURN_TEMPLATE.replace(
-      /{{captainName}}/g,
-      captainName
-    )
-      .replace(/{{teamName}}/g, teamName)
-      .replace(/{{sportType}}/g, sportType)
-      .replace(/{{returnedEquipment}}/g, equipmentList)
-      .replace(/{{issueDate}}/g, issueDate)
-      .replace(/{{returnDate}}/g, returnDate)
-      .replace(/{{equipmentStatus}}/g, equipmentStatus);
-
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: captainEmail,
-      subject: `Team Equipment Returned - ${teamName}`,
-      html: emailHtml,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    logToFile(
-      `📧 Team return email sent to ${captainEmail} (${teamName}) - MessageID: ${info.messageId}`
-    );
-    return { success: true, messageId: info.messageId };
-  } catch (error) {
-    logToFile(
-      `❌ Failed to send team return email to ${captainEmail}: ${error.message}`
-    );
-    return { success: false, error: error.message };
-  }
-}
-
-/**
- * Send team overdue equipment reminder email
- * @param {string} captainEmail - Team captain's email address
- * @param {string} captainName - Team captain's name
- * @param {string} teamName - Team name
- * @param {string} sportType - Sport type
- * @param {object} equipmentCounts - Object mapping equipment name to quantity
- * @param {string} issueDate - Original issue date
- * @param {string} returnDate - Expected return date
- * @param {number} daysOverdue - Number of days overdue
- */
-async function sendTeamOverdueEmail(
-  captainEmail,
-  captainName,
-  teamName,
-  sportType,
-  equipmentCounts,
-  issueDate,
-  returnDate,
-  daysOverdue
-) {
-  try {
-    // Format equipment list with each item on a new line
-    const equipmentList = Object.entries(equipmentCounts)
-      .map(([equipment, qty]) => `${equipment} - ${qty}`)
-      .join("<br>");
-
-    // Replace placeholders in template
-    const emailHtml = TEAM_OVERDUE_TEMPLATE.replace(
-      /{{captainName}}/g,
-      captainName
-    )
-      .replace(/{{teamName}}/g, teamName)
-      .replace(/{{sportType}}/g, sportType)
-      .replace(/{{pendingEquipment}}/g, equipmentList)
-      .replace(/{{issueDate}}/g, issueDate)
-      .replace(/{{returnDate}}/g, returnDate)
-      .replace(/{{daysOverdue}}/g, daysOverdue.toString());
-
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: captainEmail,
-      subject: `⚠️ URGENT: Team Equipment Overdue - ${teamName}`,
-      html: emailHtml,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    logToFile(
-      `📧 Team overdue email sent to ${captainEmail} (${teamName}) - MessageID: ${info.messageId}`
-    );
-    return { success: true, messageId: info.messageId };
-  } catch (error) {
-    logToFile(
-      `❌ Failed to send team overdue email to ${captainEmail}: ${error.message}`
-    );
-    return { success: false, error: error.message };
-  }
-}
-
-// ========================================================
-// AUTOMATED OVERDUE TRACKING (SCHEDULED TIMEOUT)
-// ========================================================
-
-// Configuration: Time threshold for marking items overdue
-// Supports decimal values for minute-level testing (e.g., 0.5 = 30 minutes, 0.0167 = 1 minute)
-// Can also use OVERDUE_THRESHOLD_MINUTES for direct minute values
-const OVERDUE_THRESHOLD_HOURS = parseFloat(process.env.OVERDUE_THRESHOLD_HOURS || "6");
-const OVERDUE_THRESHOLD_MINUTES = process.env.OVERDUE_THRESHOLD_MINUTES 
-  ? parseFloat(process.env.OVERDUE_THRESHOLD_MINUTES) 
-  : OVERDUE_THRESHOLD_HOURS * 60;
-
-// Store scheduled overdue timeouts (logID -> timeout handle)
-const overdueTimeouts = new Map();
-
-/**
- * Schedule an overdue check for a specific log entry at its exact overdue time
- * @param {number} logID - The log entry ID
- * @param {Date|string} issueTime - When the item was issued (timestamp)
- */
-function scheduleOverdueTimeout(logID, issueTime) {
-  // Cancel any existing timeout for this logID
-  if (overdueTimeouts.has(logID)) {
-    clearTimeout(overdueTimeouts.get(logID));
-    overdueTimeouts.delete(logID);
-  }
-
-  const issueMoment = moment(issueTime).tz("Asia/Kolkata");
-  const overdueTime = issueMoment.clone().add(OVERDUE_THRESHOLD_MINUTES, "minutes");
-  const now = moment().tz("Asia/Kolkata");
-  const msUntilOverdue = overdueTime.diff(now);
-
-  // Format for logging
-  const thresholdDisplay = OVERDUE_THRESHOLD_MINUTES < 60 
-    ? `${OVERDUE_THRESHOLD_MINUTES} minutes` 
-    : `${OVERDUE_THRESHOLD_HOURS} hours`;
-
-  if (msUntilOverdue <= 0) {
-    // Already past overdue time - trigger immediately
-    logToFile(`⏰ Log #${logID}: Already past overdue time (threshold: ${thresholdDisplay}), processing now...`);
-    setImmediate(() => processOverdueItem(logID));
-  } else {
-    // Schedule for exact overdue time
-    const timeDisplay = msUntilOverdue < 60000 
-      ? `${Math.round(msUntilOverdue / 1000)} seconds`
-      : `${Math.round(msUntilOverdue / 60000)} minutes`;
-    logToFile(`⏰ Log #${logID}: Scheduled overdue check in ${timeDisplay} (at ${overdueTime.format("h:mm:ss A")})`);
-    
-    const timeoutHandle = setTimeout(() => {
-      overdueTimeouts.delete(logID);
-      processOverdueItem(logID);
-    }, msUntilOverdue);
-    
-    overdueTimeouts.set(logID, timeoutHandle);
-  }
-}
-
-/**
- * Cancel a scheduled overdue timeout (e.g., when item is returned)
- * @param {number} logID - The log entry ID
- */
-function cancelOverdueTimeout(logID) {
-  if (overdueTimeouts.has(logID)) {
-    clearTimeout(overdueTimeouts.get(logID));
-    overdueTimeouts.delete(logID);
-    logToFile(`✅ Log #${logID}: Overdue timeout cancelled (item returned)`);
-  }
-}
-
-/**
- * Process a single item that has become overdue
- * @param {number} logID - The log entry ID to mark as overdue
- */
-async function processOverdueItem(logID) {
-  try {
-    // Get the log entry details
-    const items = await db.query(
-      `SELECT logID, studentID, studentName, studentEmail, equipmentBorrowed, timestamp, isTeamIssue, pending, returned, overdue
-       FROM Logs WHERE logID = ?`,
-      [logID]
-    );
-
-    if (items.length === 0) {
-      logToFile(`⚠️ Log #${logID}: Not found in database`);
-      return;
-    }
-
-    const item = items[0];
-
-    // Check if item is still pending and not already overdue
-    if (!item.pending || item.returned || item.overdue) {
-      logToFile(`⏭️ Log #${logID}: Skipped (pending=${item.pending}, returned=${item.returned}, overdue=${item.overdue})`);
-      return;
-    }
-
-    // Mark as overdue
-    await db.query(`UPDATE Logs SET overdue = TRUE WHERE logID = ?`, [logID]);
-    logToFile(`🔴 Log #${logID}: Marked as OVERDUE - ${item.equipmentBorrowed} borrowed by ${item.studentName}`);
-
-    // Send overdue email
-    const equipment = { [item.equipmentBorrowed]: 1 };
-    
-    if (item.isTeamIssue) {
-      const issueTime = moment(item.timestamp).tz("Asia/Kolkata");
-      const issueDate = issueTime.format("MMMM D, YYYY h:mm A");
-      const expectedReturn = issueTime.clone().add(OVERDUE_THRESHOLD_MINUTES, "minutes").format("MMMM D, YYYY h:mm A");
-      
-      await sendTeamOverdueEmail(
-        item.studentEmail,
-        item.studentName,
-        "Sports Team",
-        item.equipmentBorrowed,
-        equipment,
-        issueDate,
-        expectedReturn,
-        1
-      );
-    } else {
-      await sendOverdueEmail(
-        item.studentEmail,
-        item.studentName,
-        equipment,
-        item.equipmentBorrowed
-      );
-    }
-
-    // Mark email as sent
-    await db.query(`UPDATE Logs SET overdueEmailSent = TRUE WHERE logID = ?`, [logID]);
-    logToFile(`📧 Log #${logID}: Overdue email sent to ${item.studentEmail}`);
-
-  } catch (error) {
-    logToFile(`❌ Log #${logID}: Error processing overdue - ${error.message}`);
-  }
-}
-
-/**
- * Reschedule overdue timeouts for all pending items on server startup
- */
-async function rescheduleAllOverdueTimeouts() {
-  try {
-    logToFile("🔄 Rescheduling overdue timeouts for all pending items...");
-    
-    const pendingItems = await db.query(
-      `SELECT logID, timestamp FROM Logs 
-       WHERE pending = TRUE AND returned = FALSE AND overdue = FALSE`
-    );
-
-    if (pendingItems.length === 0) {
-      logToFile("   ✅ No pending items to schedule");
-      return;
-    }
-
-    logToFile(`   📊 Found ${pendingItems.length} pending items`);
-    
-    for (const item of pendingItems) {
-      scheduleOverdueTimeout(item.logID, item.timestamp);
-    }
-
-    logToFile(`   ✅ Scheduled ${pendingItems.length} overdue timeouts`);
-  } catch (error) {
-    logToFile(`❌ Error rescheduling overdue timeouts: ${error.message}`);
-  }
-}
-
-/**
- * Batch check and mark all overdue items (for manual/webhook triggering)
- * Note: Individual items are now auto-scheduled via setTimeout on issue
- * This function is kept for manual admin checks and catching any missed items
- */
-async function checkAndMarkOverdueItems() {
-  try {
-    // Format threshold for logging (show minutes if less than 1 hour)
-    const thresholdDisplay = OVERDUE_THRESHOLD_MINUTES < 60 
-      ? `${OVERDUE_THRESHOLD_MINUTES} minutes` 
-      : `${OVERDUE_THRESHOLD_HOURS} hours (${OVERDUE_THRESHOLD_MINUTES} minutes)`;
-    logToFile(`🔄 Running automated overdue check (threshold: ${thresholdDisplay})...`);
-
-    const now = moment().tz("Asia/Kolkata");
-    const currentTime = now.format("YYYY-MM-DD HH:mm:ss");
-    
-    // Calculate the overdue threshold time using minutes for precision
-    const overdueThreshold = now.clone()
-      .subtract(OVERDUE_THRESHOLD_MINUTES, "minutes")
-      .format("YYYY-MM-DD HH:mm:ss");
-
-    // Find items that:
-    // 1. Are still pending (not returned)
-    // 2. Were issued more than threshold minutes ago
-    // 3. Haven't been marked as overdue yet
-    const markOverdueQuery = `
-      SELECT 
-        logID,
-        studentID,
-        studentName,
-        studentEmail,
-        equipmentBorrowed,
-        timestamp,
-        isTeamIssue,
-        TIMESTAMPDIFF(MINUTE, timestamp, ?) as minutesElapsed
-      FROM Logs
-      WHERE pending = TRUE 
-        AND returned = FALSE
-        AND overdue = FALSE
-        AND timestamp <= ?
-      ORDER BY timestamp ASC
-    `;
-
-    const itemsToMarkOverdue = await db.query(markOverdueQuery, [currentTime, overdueThreshold]);
-
-    if (itemsToMarkOverdue.length === 0) {
-      logToFile("   ✅ No new items to mark as overdue");
-      return { success: true, markedOverdue: 0, emailsSent: 0 };
-    }
-
-    logToFile(`   📊 Found ${itemsToMarkOverdue.length} items to mark as overdue`);
-
-    // Update all these items to overdue status
-    const logIDs = itemsToMarkOverdue.map(item => item.logID);
-    const placeholders = logIDs.map(() => '?').join(',');
-    
-    await db.query(
-      `UPDATE Logs 
-       SET overdue = TRUE 
-       WHERE logID IN (${placeholders})`,
-      logIDs
-    );
-
-    logToFile(`   ✅ Marked ${logIDs.length} items as overdue in database`);
-
-    // Group by student for email notifications
-    const studentOverdueMap = new Map();
-    const teamOverdueMap = new Map();
-
-    itemsToMarkOverdue.forEach((item) => {
-      if (item.isTeamIssue) {
-        // Team equipment
-        if (!teamOverdueMap.has(item.studentID)) {
-          teamOverdueMap.set(item.studentID, {
-            studentEmail: item.studentEmail,
-            studentName: item.studentName,
-            equipment: {},
-            oldestTimestamp: item.timestamp,
-            logIDs: []
-          });
-        }
-        const student = teamOverdueMap.get(item.studentID);
-        student.equipment[item.equipmentBorrowed] = (student.equipment[item.equipmentBorrowed] || 0) + 1;
-        student.logIDs.push(item.logID);
-      } else {
-        // Regular equipment
-        if (!studentOverdueMap.has(item.studentID)) {
-          studentOverdueMap.set(item.studentID, {
-            studentEmail: item.studentEmail,
-            studentName: item.studentName,
-            equipment: {},
-            primaryEquipment: item.equipmentBorrowed,
-            logIDs: []
-          });
-        }
-        const student = studentOverdueMap.get(item.studentID);
-        student.equipment[item.equipmentBorrowed] = (student.equipment[item.equipmentBorrowed] || 0) + 1;
-        student.logIDs.push(item.logID);
-      }
-    });
-
-    let emailsSent = 0;
-
-    // Send emails for regular equipment (one per student)
-    for (const [studentID, data] of studentOverdueMap.entries()) {
-      // Check if we already sent email for these specific items
-      const alreadySent = await db.query(
-        `SELECT COUNT(*) as count FROM Logs 
-         WHERE logID IN (${data.logIDs.map(() => '?').join(',')}) 
-         AND overdueEmailSent = TRUE`,
-        data.logIDs
-      );
-
-      if (alreadySent[0].count === data.logIDs.length) {
-        logToFile(`   ⏭️  Skipping ${data.studentName} - email already sent for these items`);
-        continue;
-      }
-
-      // Send overdue email
-      const result = await sendOverdueEmail(
-        data.studentEmail,
-        data.studentName,
-        data.equipment,
-        data.primaryEquipment
-      );
-
-      if (result.success) {
-        // Mark these specific log entries as emailed
-        await db.query(
-          `UPDATE Logs 
-           SET overdueEmailSent = TRUE 
-           WHERE logID IN (${data.logIDs.map(() => '?').join(',')})`,
-          data.logIDs
-        );
-        emailsSent++;
-        logToFile(`   ✅ Sent overdue notification to ${data.studentName}`);
-      }
-    }
-
-    // Send emails for team equipment
-    for (const [studentID, data] of teamOverdueMap.entries()) {
-      // Check if we already sent email for these specific items
-      const alreadySent = await db.query(
-        `SELECT COUNT(*) as count FROM Logs 
-         WHERE logID IN (${data.logIDs.map(() => '?').join(',')}) 
-         AND overdueEmailSent = TRUE`,
-        data.logIDs
-      );
-
-      if (alreadySent[0].count === data.logIDs.length) {
-        logToFile(`   ⏭️  Skipping team captain ${data.studentName} - email already sent`);
-        continue;
-      }
-
-      // Calculate hours overdue
-      const issueTime = moment(data.oldestTimestamp).tz("Asia/Kolkata");
-      const hoursOverdue = now.diff(issueTime, "hours");
-      const daysOverdue = Math.floor(hoursOverdue / 24);
-
-      // Format dates
-      const issueDate = issueTime.format("MMMM D, YYYY h:mm A");
-      const expectedReturn = issueTime.clone()
-        .add(OVERDUE_THRESHOLD_MINUTES, "minutes")
-        .format("MMMM D, YYYY h:mm A");
-
-      const teamName = "Sports Team";
-      const sportType = Object.keys(data.equipment).join(", ");
-
-      // Send team overdue email
-      const result = await sendTeamOverdueEmail(
-        data.studentEmail,
-        data.studentName,
-        teamName,
-        sportType,
-        data.equipment,
-        issueDate,
-        expectedReturn,
-        Math.max(daysOverdue, 1) // At least 1 day for display
-      );
-
-      if (result.success) {
-        // Mark these specific log entries as emailed
-        await db.query(
-          `UPDATE Logs 
-           SET overdueEmailSent = TRUE 
-           WHERE logID IN (${data.logIDs.map(() => '?').join(',')})`,
-          data.logIDs
-        );
-        emailsSent++;
-        logToFile(`   ✅ Sent team overdue notification to ${data.studentName}`);
-      }
-    }
-
-    logToFile(`🏁 Overdue check complete - Marked: ${logIDs.length}, Emails sent: ${emailsSent}`);
-    
-    return {
-      success: true,
-      markedOverdue: logIDs.length,
-      emailsSent: emailsSent,
-      threshold: thresholdDisplay,
-      thresholdMinutes: OVERDUE_THRESHOLD_MINUTES
-    };
-    
-  } catch (error) {
-    logToFile(`❌ Error in overdue check: ${error.message}`);
-    console.error("Overdue check error:", error);
-    return { success: false, error: error.message };
-  }
-}
-
-// ========================================================
-// END OVERDUE TRACKING
-// ========================================================
-
-// ========================================================
-// WEBHOOK FOR AUTOMATED OVERDUE CHECKING
-// ========================================================
-
-/**
- * Webhook endpoint to trigger instant overdue checking
- * Automatically marks items overdue after configurable threshold (default: 6 hours)
- * Can be called:
- * - After every borrow/return operation
- * - Via scheduled external service (GitHub Actions, cron services)
- * - Manually by admins for testing
- */
-app.post("/api/check-overdue", async (req, res) => {
-  try {
-    // Optional: Add API key authentication for security
-    const apiKey = req.headers["x-api-key"] || req.body.apiKey;
-    const expectedKey = process.env.WEBHOOK_API_KEY;
-    
-    if (expectedKey && apiKey !== expectedKey) {
-      logToFile("⚠️ Unauthorized overdue check attempt");
-      return res.status(401).json({ 
-        success: false, 
-        error: "Unauthorized - Invalid API key" 
-      });
-    }
-
-    logToFile("🔔 Webhook triggered: Starting automated overdue check");
-    
-    // Run the automated overdue check
-    const result = await checkAndMarkOverdueItems();
-    
-    res.json({ 
-      success: result.success,
-      message: "Automated overdue check completed",
-      timestamp: moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss"),
-      data: {
-        itemsMarkedOverdue: result.markedOverdue || 0,
-        emailsSent: result.emailsSent || 0,
-        overdueThreshold: result.threshold,
-        overdueThresholdMinutes: result.thresholdMinutes || OVERDUE_THRESHOLD_MINUTES
-      }
-    });
-  } catch (error) {
-    logToFile(`❌ Webhook error: ${error.message}`);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-/**
- * GET endpoint for manual/browser-based triggering (admin use)
- */
-app.get("/api/check-overdue", async (req, res) => {
-  try {
-    // Require admin authentication for GET endpoint
-    if (!req.isAuthenticated() || req.user?.role !== "admin") {
-      return res.status(403).json({ 
-        success: false, 
-        error: "Admin access required" 
-      });
-    }
-
-    logToFile("🔔 Manual overdue check triggered by admin");
-    const result = await checkAndMarkOverdueItems();
-    
-    res.json({ 
-      success: result.success,
-      message: "Manual overdue check completed",
-      timestamp: moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss"),
-      data: {
-        itemsMarkedOverdue: result.markedOverdue || 0,
-        emailsSent: result.emailsSent || 0,
-        overdueThreshold: result.threshold,
-        overdueThresholdMinutes: result.thresholdMinutes || OVERDUE_THRESHOLD_MINUTES
-      }
-    });
-  } catch (error) {
-    logToFile(`❌ Manual overdue check error: ${error.message}`);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-// ========================================================
-// END WEBHOOK
-// ========================================================
-
-/**
- * Schedule overdue timeouts for recently issued items
- * Call this after equipment borrow operations
- * Fetches the most recent log entries and schedules timeouts for them
- */
-async function scheduleOverdueForRecentIssues(studentID) {
-  try {
-    // Get recent pending items for this student that don't have scheduled timeouts
-    const recentItems = await db.query(
-      `SELECT logID, timestamp FROM Logs 
-       WHERE studentID = ? 
-         AND pending = TRUE 
-         AND returned = FALSE 
-         AND overdue = FALSE 
-       ORDER BY logID DESC 
-       LIMIT 50`,
-      [studentID]
-    );
-
-    for (const item of recentItems) {
-      if (!overdueTimeouts.has(item.logID)) {
-        scheduleOverdueTimeout(item.logID, item.timestamp);
-      }
-    }
-  } catch (error) {
-    logToFile(`⚠️ Error scheduling overdue for recent issues: ${error.message}`);
-  }
-}
-
-// Legacy function for backward compatibility
-async function autoTriggerOverdueCheck() {
-  // Now handled by scheduled timeouts - this is a no-op
-  // Kept for backward compatibility with existing code paths
-}
 
 app.use(
   session({
@@ -1239,117 +290,104 @@ app.get("/issue_login", (req, res) => {
   });
 });
 
-app.post("/issue_login", (req, res) => {
+// ================= STUDENT LOGIN ROUTES =================
+
+app.post("/issue_login", async (req, res) => {
   const ashokaId = req.body.qrString?.trim();
+  try {
+    const student = await prisma.student.findUnique({
+      where: { studentID: ashokaId },
+      select: { studentID: true, studentName: true, studentEmail: true },
+    });
 
-  db.query(
-    "SELECT studentID, studentName, studentEmail FROM Students WHERE studentID = ?",
-    [ashokaId],
-    (err, results) => {
-      if (err) {
-        console.error("Database error:", err);
-        return res.status(500).send("Database error");
-      }
-      if (results.length === 0) {
-        return res.status(404).send("Student not found");
-      }
-
-      const studentData = {
-        AshokaId: results[0].studentID,
-        name: results[0].studentName,
-        email: results[0].studentEmail
-      };
-
-      console.log("Student Data:", studentData);
-      req.session.student = studentData;
-      res.redirect("/issue");
+    if (!student) {
+      return res.status(404).send("Student not found");
     }
-  );
+
+    const studentData = {
+      AshokaId: student.studentID,
+      name: student.studentName,
+      email: student.studentEmail,
+    };
+
+    console.log("Student Data:", studentData);
+    req.session.student = studentData;
+    res.redirect("/issue");
+  } catch (err) {
+    console.error("Database error:", err);
+    return res.status(500).send("Database error");
+  }
 });
 
-app.post("/issue_login_sports", (req, res) => {
+app.post("/issue_login_sports", async (req, res) => {
   const ashokaId = req.body.qrString?.trim();
+  try {
+    const student = await prisma.student.findUnique({
+      where: { studentID: ashokaId },
+      select: { studentID: true, studentName: true, studentEmail: true, sportsTeamAuthorised: true },
+    });
 
-  db.query(
-    "SELECT studentID, studentName, studentEmail, sportsTeamAuthorised FROM Students WHERE studentID = ?",
-    [ashokaId],
-    (err, results) => {
-      if (err) return res.status(500).send("Database error");
-      if (results.length === 0)
-        return res.status(404).send("Student not found");
+    if (!student) {
+      return res.status(404).send("Student not found");
+    }
 
-      if (!results[0].sportsTeamAuthorised) {
-        return res.render("error", {
-          msg: "Unauthorized: You are not authorised as a sports team member.",
-        });
-      }
-
-      req.session.student = {
-        AshokaId: results[0].studentID,
-        name: results[0].studentName,
-        email: results[0].studentEmail
-      };
-
-      req.session.save(() => {
-        res.redirect("/issue_team");
+    if (!student.sportsTeamAuthorised) {
+      return res.render("error", {
+        msg: "Unauthorized: You are not authorised as a sports team member.",
       });
     }
-  );
+
+    req.session.student = {
+      AshokaId: student.studentID,
+      name: student.studentName,
+      email: student.studentEmail,
+    };
+
+    req.session.save(() => {
+      res.redirect("/issue_team");
+    });
+  } catch (err) {
+    console.error("Database error:", err);
+    return res.status(500).send("Database error");
+  }
 });
 
+// ================= HELPER FUNCTIONS =================
 
-function calculateAvailableEquipment(callback) {
-  const query = `
-    SELECT 
-      e.equipment,
-      e.totalQuantity,
-      e.inUseQuantity,
-      COALESCE(COUNT(l.logID), 0) as pendingCount
-    FROM Equipment e
-    LEFT JOIN Logs l ON e.equipment = l.equipmentBorrowed AND l.pending = TRUE
-    GROUP BY e.equipment, e.totalQuantity, e.inUseQuantity
-  `;
-
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error("Database error:", err);
-      return callback(err, null);
-    }
-
-    const availableItems = {};
-    results.forEach((row) => {
-      // Available = Total - InUse - Pending
-      availableItems[row.equipment] =
-        row.totalQuantity - row.inUseQuantity - row.pendingCount;
-    });
-
-    callback(null, availableItems);
+async function calculateAvailableEquipment() {
+  const equipmentList = await prisma.equipment.findMany({
+    select: {
+      name: true,
+      totalQuantity: true,
+      inUseQuantity: true,
+      _count: {
+        select: {
+          logs: { where: { status: "pending" } },
+        },
+      },
+    },
   });
+
+  const availableItems = {};
+  equipmentList.forEach((row) => {
+    availableItems[row.name] =
+      row.totalQuantity - row.inUseQuantity - row._count.logs;
+  });
+  return availableItems;
 }
 
-function getInUseEquipment(callback) {
-  // select inUseQuantity from table Equipment
-  const query = `
-    SELECT 
-      equipment,
-      inUseQuantity as inUseCount
-      from Equipment
-  `;
-
-  db.query(query, (err, results) => {
-    if (err) {
-      console.error("Database error:", err);
-      return callback(err, null);
-    }
-
-    const inUseItems = {};
-    results.forEach((row) => {
-      inUseItems[row.equipment] = row.inUseCount;
-    });
-
-    callback(null, inUseItems);
+async function getInUseEquipment() {
+  const equipmentList = await prisma.equipment.findMany({
+    select: { name: true, inUseQuantity: true },
   });
+
+  const inUseItems = {};
+  equipmentList.forEach((row) => {
+    inUseItems[row.name] = row.inUseQuantity;
+  });
+  return inUseItems;
 }
+
 // ================= TEAM ISSUE QR LOGIN =================
 app.get("/issue_team_login", (req, res) => {
   req.session.student = null; // FORCE fresh QR
@@ -1360,86 +398,64 @@ app.get("/issue_team_login", (req, res) => {
 });
 
 // Sports team issue endpoint
-app.get(
-  "/issue_team",
-  (req, res, next) => {
-    if (!req.session.student) {
-      return res.redirect("/issue_team_login");
-    }
-    next();
-  },
-  (req, res) => {
-    getInUseEquipment((err, totalItems) => {
-      if (err) {
-        return res.status(500).send("Error calculating in use equipment");
-      }
-
-      // get the email by querying the Students table on AshokaId
-      db.query(
-        "SELECT studentEmail FROM Students WHERE studentID = ?",
-        [req.session.student.AshokaId],
-        (emailErr, emailResults) => {
-          if (emailErr || emailResults.length === 0) {
-            console.error("Error fetching student email:", emailErr);
-            return res.status(500).send("Could not find student email");
-          }
-
-          const studentEmail = emailResults[0].studentEmail;
-          const studentName = req.session.student.name;
-          const currentDate = new Date().toISOString().split("T")[0];
-
-          console.log(
-            "Querying with information: ",
-            studentEmail,
-            studentName,
-            currentDate
-          );
-
-          // Check for valid sports request
-          db.query(
-            `SELECT equipment, quantity, startDate, endDate, approvedOn 
-           FROM SportsRequests 
-           WHERE studentEmail = ? 
-           AND studentName = ? 
-           AND startDate <= ? 
-           AND endDate >= ? 
-           AND (issued IS NULL OR issued = FALSE)`,
-            [studentEmail, studentName, currentDate, currentDate],
-            (err, results) => {
-              if (err) {
-                console.error("Database error:", err);
-                return res.status(500).send("Database error");
-              }
-
-              if (results.length === 0) {
-                return res.render("error", {
-                  errorMsg:
-                    "No valid sports equipment request found for your account. Please use the regular issue portal.",
-                  ...viewUser(req),
-                });
-              }
-
-              // Transform results to match the frontend's expected format
-              const equipment = results.map((item) => ({
-                equipment: item.equipment,
-                outNum: item.quantity,
-                outTime: item.approvedOn || new Date().toISOString(),
-              }));
-
-              // Render the team issue page
-              res.render("team_issue", {
-                student: req.session.student,
-                equipment: equipment,
-                activePage: "team-landing",
-                ...viewUser(req),
-              });
-            }
-          );
-        }
-      );
-    });
+app.get("/issue_team", async (req, res) => {
+  if (!req.session.student) {
+    return res.redirect("/issue_team_login");
   }
-);
+
+  try {
+    const student = await prisma.student.findUnique({
+      where: { studentID: req.session.student.AshokaId },
+      select: { studentEmail: true },
+    });
+
+    if (!student) {
+      return res.status(500).send("Could not find student email");
+    }
+
+    const studentEmail = student.studentEmail;
+    const currentDate = new Date();
+
+    // Check for valid sports request
+    const requests = await prisma.sportsRequest.findMany({
+      where: {
+        studentEmail: studentEmail,
+        startDate: { lte: currentDate },
+        endDate: { gte: currentDate },
+        status: "pending",
+      },
+      include: {
+        equipment: { select: { name: true } },
+      },
+    });
+
+    if (requests.length === 0) {
+      return res.render("error", {
+        errorMsg:
+          "No valid sports equipment request found for your account. Please use the regular issue portal.",
+        ...viewUser(req),
+      });
+    }
+
+    // Transform results to match the frontend's expected format
+    const equipment = requests.map((item) => ({
+      equipment: item.equipment.name,
+      outNum: item.quantity,
+      outTime: item.approvedOn || new Date().toISOString(),
+    }));
+
+    // Render the team issue page
+    res.render("team_issue", {
+      student: req.session.student,
+      equipment: equipment,
+      activePage: "team-landing",
+      ...viewUser(req),
+    });
+  } catch (err) {
+    console.error("Error loading team issue page:", err);
+    res.status(500).send("Database error");
+  }
+});
 
 app.get("/team_return_login", (req, res) => {
   req.session.student = null; // force fresh QR
@@ -1458,25 +474,23 @@ app.get("/team_return", async (req, res) => {
   const student = req.session.student;
 
   try {
-    const rows = await db.query(
-      `
+    // Use raw query for GROUP BY with aggregation (Prisma groupBy doesn't support relations)
+    const rows = await prisma.$queryRaw`
       SELECT
-        equipmentBorrowed AS equipment,
+        e.name AS equipment,
         COUNT(*) AS outNum,
-        MIN(timestamp) AS outTime
-      FROM Logs
-      WHERE studentID = ?
-        AND isTeamIssue = TRUE
-        AND pending = TRUE
-        AND returned = FALSE
-      GROUP BY equipmentBorrowed
-      `,
-      [student.AshokaId]
-    );
+        MIN(l.timestamp) AS outTime
+      FROM Logs l
+      JOIN Equipment e ON l.equipmentID = e.equipmentID
+      WHERE l.studentID = ${student.AshokaId}
+        AND l.isTeamIssue = TRUE
+        AND l.status = 'pending'
+      GROUP BY e.name
+    `;
 
     const equipment = rows.map((row) => ({
       equipment: row.equipment,
-      outNum: row.outNum,
+      outNum: Number(row.outNum),
       outTime: moment(row.outTime)
         .tz("Asia/Kolkata")
         .format("ddd DD-MM-YYYY HH:mm:ss"),
@@ -1494,32 +508,32 @@ app.get("/team_return", async (req, res) => {
   }
 });
 
-app.post("/team_return_login", (req, res) => {
+app.post("/team_return_login", async (req, res) => {
   const ashokaId = req.body.qrString?.trim();
+  try {
+    const student = await prisma.student.findUnique({
+      where: { studentID: ashokaId },
+      select: { studentID: true, studentName: true, studentEmail: true },
+    });
 
-  db.query(
-    "SELECT studentID, studentName, studentEmail FROM Students WHERE studentID = ?",
-    [ashokaId],
-    (err, results) => {
-      if (err) {
-        console.error("Database error:", err);
-        return res.status(500).send("Database error");
-      }
-      if (results.length === 0) {
-        return res.status(404).send("Student not found");
-      }
-
-      const studentData = {
-        AshokaId: results[0].studentID,
-        name: results[0].studentName,
-        email: results[0].studentEmail
-      };
-
-      req.session.student = studentData;
-      res.redirect("/team_return");
+    if (!student) {
+      return res.status(404).send("Student not found");
     }
-  );
+
+    req.session.student = {
+      AshokaId: student.studentID,
+      name: student.studentName,
+      email: student.studentEmail,
+    };
+
+    res.redirect("/team_return");
+  } catch (err) {
+    console.error("Database error:", err);
+    return res.status(500).send("Database error");
+  }
 });
+
+// ================= TEAM RETURN =================
 app.post("/return_team_equipment", requireStudent, async (req, res) => {
   const equipments =
     typeof req.body.equipments === "string"
@@ -1527,151 +541,143 @@ app.post("/return_team_equipment", requireStudent, async (req, res) => {
       : req.body.equipments;
 
   const studentId = req.session.student.AshokaId;
-  const returnTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
+  const returnTime = new Date();
 
   if (!equipments || equipments.length === 0) {
     return res.json({ success: false, error: "No equipment provided" });
   }
 
-  const connection = await pool.getConnection();
-
   try {
-    await connection.beginTransaction();
-
     const returnedCounts = {};
 
-    // 1. Mark Logs as returned
-    for (const item of equipments) {
-      const { equipment, outNum } = item;
-      returnedCounts[equipment] =
-        (returnedCounts[equipment] || 0) + Number(outNum);
+    await prisma.$transaction(async (tx) => {
+      // 1. Mark Logs as returned
+      for (const item of equipments) {
+        const { equipment: equipmentName, outNum } = item;
+        returnedCounts[equipmentName] =
+          (returnedCounts[equipmentName] || 0) + Number(outNum);
 
-      const [logs] = await connection.query(
-        `
-        SELECT logID
-        FROM Logs
-        WHERE studentID = ?
-          AND equipmentBorrowed = ?
-          AND isTeamIssue = TRUE
-          AND pending = TRUE
-          AND returned = FALSE
-        LIMIT ?
-        `,
-        [studentId, equipment, outNum]
-      );
+        // Find the equipment ID
+        const equip = await tx.equipment.findUnique({
+          where: { name: equipmentName },
+          select: { equipmentID: true },
+        });
 
-      if (logs.length < outNum) {
-        throw new Error(`Not enough team-issued ${equipment} found to return`);
+        if (!equip) {
+          throw new Error(`Equipment "${equipmentName}" not found`);
+        }
+
+        const logs = await tx.log.findMany({
+          where: {
+            studentID: studentId,
+            equipmentID: equip.equipmentID,
+            isTeamIssue: true,
+            status: "pending",
+          },
+          select: { logID: true },
+          take: Number(outNum),
+        });
+
+        if (logs.length < outNum) {
+          throw new Error(`Not enough team-issued ${equipmentName} found to return`);
+        }
+
+        for (const log of logs) {
+          cancelOverdueTimeout(log.logID);
+
+          await tx.log.update({
+            where: { logID: log.logID },
+            data: {
+              status: "returned",
+              returnedTimestamp: returnTime,
+            },
+          });
+        }
       }
 
-      for (const log of logs) {
-        // Cancel any scheduled overdue timeout for this item
-        cancelOverdueTimeout(log.logID);
-        
-        await connection.query(
-          `
-          UPDATE Logs
-          SET pending = FALSE,
-              returned = TRUE,
-              returnedTimestamp = ?
-          WHERE logID = ?
-          `,
-          [returnTime, log.logID]
-        );
+      // 2. Update Equipment inventory
+      for (const [equipmentName, qty] of Object.entries(returnedCounts)) {
+        const equip = await tx.equipment.findUnique({
+          where: { name: equipmentName },
+        });
+
+        if (!equip) {
+          throw new Error(`Equipment "${equipmentName}" not found while updating inventory`);
+        }
+
+        await tx.equipment.update({
+          where: { name: equipmentName },
+          data: {
+            reservedQuantity: { decrement: qty },
+            inUseQuantity: { increment: qty },
+          },
+        });
       }
-    }
 
-    // 2. Update Equipment inventory
-    for (const [equipment, qty] of Object.entries(returnedCounts)) {
-      const [result] = await connection.query(
-        `
-        UPDATE Equipment
-        SET reservedQuantity = GREATEST(reservedQuantity - ?, 0),
-            inUseQuantity = inUseQuantity + ?
-        WHERE equipment = ?
-        `,
-        [qty, qty, equipment]
-      );
+      // 3. Sync SportsRequests status
+      for (const equipmentName of Object.keys(returnedCounts)) {
+        const equip = await tx.equipment.findUnique({
+          where: { name: equipmentName },
+          select: { equipmentID: true },
+        });
 
-      if (result.affectedRows === 0) {
-        throw new Error(
-          `Equipment "${equipment}" not found while updating inventory`
-        );
+        const totalIssued = await tx.log.count({
+          where: {
+            studentID: studentId,
+            equipmentID: equip.equipmentID,
+            isTeamIssue: true,
+          },
+        });
+
+        const totalReturned = await tx.log.count({
+          where: {
+            studentID: studentId,
+            equipmentID: equip.equipmentID,
+            isTeamIssue: true,
+            status: { in: ["returned", "overdue_returned"] },
+          },
+        });
+
+        if (totalIssued === totalReturned) {
+          const studentRecord = await tx.student.findUnique({
+            where: { studentID: studentId },
+            select: { studentEmail: true },
+          });
+
+          await tx.sportsRequest.updateMany({
+            where: {
+              equipmentID: equip.equipmentID,
+              status: "issued",
+              studentEmail: studentRecord.studentEmail,
+            },
+            data: { status: "returned" },
+          });
+        }
       }
-    }
-
-    // 3. Sync SportsRequests.returned
-    for (const equipment of Object.keys(returnedCounts)) {
-      const [[issuedRow]] = await connection.query(
-        `
-        SELECT COUNT(*) AS totalIssued
-        FROM Logs
-        WHERE studentID = ?
-          AND equipmentBorrowed = ?
-          AND isTeamIssue = TRUE
-        `,
-        [studentId, equipment]
-      );
-
-      const [[returnedRow]] = await connection.query(
-        `
-        SELECT COUNT(*) AS totalReturned
-        FROM Logs
-        WHERE studentID = ?
-          AND equipmentBorrowed = ?
-          AND isTeamIssue = TRUE
-          AND returned = TRUE
-        `,
-        [studentId, equipment]
-      );
-
-      if (issuedRow.totalIssued === returnedRow.totalReturned) {
-        await connection.query(
-          `
-          UPDATE SportsRequests
-          SET returned = TRUE
-          WHERE equipment = ?
-            AND issued = TRUE
-            AND studentEmail = (
-              SELECT studentEmail FROM Students WHERE studentID = ?
-            )
-          `,
-          [equipment, studentId]
-        );
-      }
-    }
-
-    await connection.commit();
+    });
 
     // Send team return confirmation email
     const student = req.session.student;
+    const studentRecord = await prisma.student.findUnique({
+      where: { studentID: studentId },
+      select: { studentEmail: true },
+    });
 
-    // Get student email
-    const emailRows = await db.query(
-      "SELECT studentEmail FROM Students WHERE studentID = ?",
-      [studentId]
-    );
-
-    if (emailRows.length > 0) {
-      const studentEmail = emailRows[0].studentEmail;
+    if (studentRecord) {
+      const studentEmail = studentRecord.studentEmail;
       const returnDate = moment().tz("Asia/Kolkata").format("MMMM D, YYYY");
 
-      // Get the original issue date from the first log
-      const issueLogs = await db.query(
-        `SELECT timestamp FROM Logs 
-         WHERE studentID = ? AND isTeamIssue = TRUE 
-         ORDER BY timestamp ASC LIMIT 1`,
-        [studentId]
-      );
+      const issueLog = await prisma.log.findFirst({
+        where: { studentID: studentId, isTeamIssue: true },
+        orderBy: { timestamp: "asc" },
+        select: { timestamp: true },
+      });
 
-      const issueDate =
-        issueLogs.length > 0
-          ? moment(issueLogs[0].timestamp)
-              .tz("Asia/Kolkata")
-              .format("MMMM D, YYYY")
-          : "N/A";
+      const issueDate = issueLog
+        ? moment(issueLog.timestamp).tz("Asia/Kolkata").format("MMMM D, YYYY")
+        : "N/A";
 
-      const teamName = "Sports Team"; // You may want to add this to the request
+      const teamName = "Sports Team";
       const sportType = Object.keys(returnedCounts).join(", ");
       const equipmentStatus = "All equipment returned successfully";
 
@@ -1697,51 +703,48 @@ app.post("/return_team_equipment", requireStudent, async (req, res) => {
       })),
     });
   } catch (err) {
-    await connection.rollback();
     console.error("Team return error:", err);
     res.json({ success: false, error: err.message });
-  } finally {
-    connection.release();
   }
 });
 
+// ================= REGULAR ISSUE =================
+
 // Regular issue endpoint - GET
-app.get("/issue", (req, res) => {
-  // Calculate actual available equipment by checking pending logs
-  db.query(
-    `SELECT 
-      e.equipment,
-      e.inUseQuantity,
-      COALESCE(COUNT(l.logID), 0) as pendingCount,
-      (e.inUseQuantity - COALESCE(COUNT(l.logID), 0)) as available
-    FROM Equipment e
-    LEFT JOIN Logs l ON e.equipment = l.equipmentBorrowed AND l.pending = TRUE
-    GROUP BY e.equipment, e.inUseQuantity`,
-    (err, results) => {
-      if (err) {
-        console.error("Error calculating equipment availability:", err);
-        return res.status(500).send("Error calculating equipment");
-      }
+app.get("/issue", async (req, res) => {
+  try {
+    const equipmentList = await prisma.equipment.findMany({
+      select: {
+        name: true,
+        inUseQuantity: true,
+        _count: {
+          select: {
+            logs: { where: { status: "pending" } },
+          },
+        },
+      },
+    });
 
-      // Transform results into a more usable format
-      const availableItems = {};
-      results.forEach((row) => {
-        availableItems[row.equipment] = row.available;
-      });
+    const availableItems = {};
+    equipmentList.forEach((row) => {
+      availableItems[row.name] = row.inUseQuantity - row._count.logs;
+    });
 
-      res.render("issue", {
-        student: req.session.student,
-        availableItems: availableItems,
-        activePage: "issue",
-        ...viewUser(req),
-      });
-    }
-  );
+    res.render("issue", {
+      student: req.session.student,
+      availableItems: availableItems,
+      activePage: "issue",
+      ...viewUser(req),
+    });
+  } catch (err) {
+    console.error("Error calculating equipment availability:", err);
+    return res.status(500).send("Error calculating equipment");
+  }
 });
 
 // Regular issue endpoint - POST
-app.post("/issue", (req, res) => {
-  const currentTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
+app.post("/issue", async (req, res) => {
+  const currentTime = new Date();
   const quantity = req.body.quantity || {};
 
   // Get list of equipment to issue (where quantity > 0)
@@ -1753,155 +756,118 @@ app.post("/issue", (req, res) => {
     return res.redirect("/landing");
   }
 
-  // First, get the student email from the Students table
-  db.query(
-    "SELECT studentEmail FROM Students WHERE studentID = ?",
-    [req.session.student.AshokaId],
-    (emailErr, emailResults) => {
-      if (emailErr || emailResults.length === 0) {
-        console.error("Error fetching student email:", emailErr);
-        return res.status(500).send("Could not find student email");
-      }
+  try {
+    // Get student email
+    const student = await prisma.student.findUnique({
+      where: { studentID: req.session.student.AshokaId },
+      select: { studentEmail: true },
+    });
 
-      const studentEmail = emailResults[0].studentEmail;
-
-      // Double-check availability before proceeding (race condition protection)
-      const placeholders = equipmentList.map(() => "?").join(",");
-
-      db.query(
-        `SELECT 
-          e.equipment,
-          e.inUseQuantity,
-          COALESCE(COUNT(l.logID), 0) as pendingCount,
-          (e.inUseQuantity - COALESCE(COUNT(l.logID), 0)) as available
-        FROM Equipment e
-        LEFT JOIN Logs l ON e.equipment = l.equipmentBorrowed AND l.pending = TRUE
-        WHERE e.equipment IN (${placeholders})
-        GROUP BY e.equipment, e.inUseQuantity`,
-        equipmentList,
-        (availErr, availResults) => {
-          if (availErr) {
-            console.error("Error checking availability:", availErr);
-            return res.status(500).send("Database error");
-          }
-
-          // Check if requested quantities are available
-          const availabilityMap = {};
-          availResults.forEach((row) => {
-            availabilityMap[row.equipment] = row.available;
-          });
-
-          for (let item of equipmentList) {
-            const requested = Number(quantity[item]);
-            const available = availabilityMap[item] || 0;
-
-            if (requested > available) {
-              return res
-                .status(400)
-                .send(
-                  `Not enough ${item} available. Requested: ${requested}, Available: ${available}`
-                );
-            }
-          }
-
-          // Proceed with issuing equipment
-          let completed = 0;
-          let hasError = false;
-          const issuedEquipment = [];
-
-          equipmentList.forEach((item) => {
-            const qtyToIssue = Number(quantity[item]);
-
-            // Calculate due date (e.g., 7 days from now)
-            const dueDate = moment()
-              .tz("Asia/Kolkata")
-              .add(7, "days")
-              .format("YYYY-MM-DD HH:mm:ss");
-
-            // Insert one row per unit of equipment (repeat for quantity)
-            for (let i = 0; i < qtyToIssue; i++) {
-              db.query(
-                `INSERT INTO Logs (
-                  timestamp, 
-                  equipmentBorrowed, 
-                  studentID, 
-                  studentEmail, 
-                  studentName, 
-                  dueOn, 
-                  pending, 
-                  returned
-                ) VALUES (?, ?, ?, ?, ?, ?, TRUE, FALSE)`,
-                [
-                  currentTime,
-                  item,
-                  req.session.student.AshokaId,
-                  studentEmail,
-                  req.session.student.name,
-                  dueDate,
-                ],
-                (insertErr) => {
-                  if (insertErr) {
-                    hasError = true;
-                    console.error("Error issuing equipment:", insertErr);
-                  }
-
-                  completed++;
-
-                  // Check if all insertions are complete
-                  const totalInsertions = equipmentList.reduce(
-                    (sum, eq) => sum + Number(quantity[eq]),
-                    0
-                  );
-
-                  if (completed === totalInsertions) {
-                    if (hasError) {
-                      return res.status(500).send("Database error");
-                    }
-
-                    // Build issued equipment list (grouped by equipment type)
-                    equipmentList.forEach((eq) => {
-                      issuedEquipment.push({
-                        equipment: eq,
-                        outNum: Number(quantity[eq]),
-                      });
-                    });
-
-                    // Prepare equipment counts for email
-                    const equipmentCounts = {};
-                    equipmentList.forEach((eq) => {
-                      equipmentCounts[eq] = Number(quantity[eq]);
-                    });
-
-                    // Send borrow confirmation email (non-blocking)
-                    sendBorrowEmail(
-                      studentEmail,
-                      req.session.student.name,
-                      equipmentCounts
-                    ).catch((err) => {
-                      console.error("Email send error:", err);
-                      // Don't block the response on email failure
-                    });
-
-                    // Schedule overdue timeouts for newly issued items
-                    scheduleOverdueForRecentIssues(req.session.student.AshokaId);
-
-                    // Render success page with equipment details
-                    res.render("success", {
-                      studentName: req.session.student.name,
-                      equipment: issuedEquipment,
-                      ...viewUser(req),
-                      mode: "issued",
-                    });
-                  }
-                }
-              );
-            }
-          });
-        }
-      );
+    if (!student) {
+      return res.status(500).send("Could not find student email");
     }
-  );
+
+    const studentEmail = student.studentEmail;
+
+    // Double-check availability
+    const equipmentRows = await prisma.equipment.findMany({
+      where: { name: { in: equipmentList } },
+      select: {
+        equipmentID: true,
+        name: true,
+        inUseQuantity: true,
+        _count: {
+          select: {
+            logs: { where: { status: "pending" } },
+          },
+        },
+      },
+    });
+
+    const availabilityMap = {};
+    const equipmentIDMap = {};
+    equipmentRows.forEach((row) => {
+      availabilityMap[row.name] = row.inUseQuantity - row._count.logs;
+      equipmentIDMap[row.name] = row.equipmentID;
+    });
+
+    for (let item of equipmentList) {
+      const requested = Number(quantity[item]);
+      const available = availabilityMap[item] || 0;
+
+      if (requested > available) {
+        return res
+          .status(400)
+          .send(
+            `Not enough ${item} available. Requested: ${requested}, Available: ${available}`
+          );
+      }
+    }
+
+    // Issue equipment - create log entries
+    const dueDate = moment()
+      .tz("Asia/Kolkata")
+      .add(7, "days")
+      .toDate();
+
+    const logCreates = [];
+    for (const item of equipmentList) {
+      const qtyToIssue = Number(quantity[item]);
+      for (let i = 0; i < qtyToIssue; i++) {
+        logCreates.push(
+          prisma.log.create({
+            data: {
+              timestamp: currentTime,
+              equipmentID: equipmentIDMap[item],
+              studentID: req.session.student.AshokaId,
+              dueOn: dueDate,
+              status: "pending",
+            },
+          })
+        );
+      }
+    }
+
+    await Promise.all(logCreates);
+
+    // Build issued equipment list
+    const issuedEquipment = equipmentList.map((eq) => ({
+      equipment: eq,
+      outNum: Number(quantity[eq]),
+    }));
+
+    // Prepare equipment counts for email
+    const equipmentCounts = {};
+    equipmentList.forEach((eq) => {
+      equipmentCounts[eq] = Number(quantity[eq]);
+    });
+
+    // Send borrow confirmation email (non-blocking)
+    sendBorrowEmail(
+      studentEmail,
+      req.session.student.name,
+      equipmentCounts
+    ).catch((err) => {
+      console.error("Email send error:", err);
+    });
+
+    // Schedule overdue timeouts for newly issued items
+    scheduleOverdueForRecentIssues(req.session.student.AshokaId);
+
+    // Render success page with equipment details
+    res.render("success", {
+      studentName: req.session.student.name,
+      equipment: issuedEquipment,
+      ...viewUser(req),
+      mode: "issued",
+    });
+  } catch (err) {
+    console.error("Error issuing equipment:", err);
+    return res.status(500).send("Database error");
+  }
 });
+
+// ================= TEAM ISSUE =================
 
 app.post("/issue_team_equipment", requireStudent, async (req, res) => {
   const selectedEquipments =
@@ -1915,87 +881,73 @@ app.post("/issue_team_equipment", requireStudent, async (req, res) => {
     return res.json({ success: false, error: "No equipment selected" });
   }
 
-  const currentTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
+  const currentTime = new Date();
   const dueDate = moment()
     .tz("Asia/Kolkata")
     .add(7, "days")
-    .format("YYYY-MM-DD HH:mm:ss");
+    .toDate();
 
   try {
     // Fetch student email
-    const emailRows = await db.query(
-      "SELECT studentEmail FROM Students WHERE studentID = ?",
-      [student.AshokaId]
-    );
+    const studentRecord = await prisma.student.findUnique({
+      where: { studentID: student.AshokaId },
+      select: { studentEmail: true },
+    });
 
-    if (emailRows.length === 0) {
+    if (!studentRecord) {
       return res
         .status(500)
         .json({ success: false, error: "Student email not found" });
     }
 
-    const studentEmail = emailRows[0].studentEmail;
+    const studentEmail = studentRecord.studentEmail;
 
-    // Fetch approved sports requests
-    const placeholders = selectedEquipments.map(() => "?").join(",");
-
-    const requests = await db.query(
-      `SELECT equipment, quantity
-       FROM SportsRequests
-       WHERE studentEmail = ?
-         AND studentName = ?
-         AND equipment IN (${placeholders})
-         AND (issued IS NULL OR issued = FALSE)`,
-      [studentEmail, student.name, ...selectedEquipments]
-    );
+    // Fetch approved sports requests with equipment info
+    const requests = await prisma.sportsRequest.findMany({
+      where: {
+        studentEmail: studentEmail,
+        equipment: { name: { in: selectedEquipments } },
+        status: "pending",
+      },
+      include: {
+        equipment: { select: { equipmentID: true, name: true } },
+      },
+    });
 
     if (requests.length === 0) {
       return res.json({ success: false, error: "No valid requests found" });
     }
 
-    // Insert into Logs item-wise (same as normal issue)
+    // Insert into Logs item-wise
     for (const reqItem of requests) {
       for (let i = 0; i < reqItem.quantity; i++) {
-        await db.query(
-          `INSERT INTO Logs (
-              timestamp,
-              equipmentBorrowed,
-              studentID,
-              studentEmail,
-              studentName,
-              dueOn,
-              pending,
-              returned,
-              isTeamIssue
-            ) VALUES (?, ?, ?, ?, ?, ?, TRUE, FALSE, TRUE)
-            `,
-          [
-            currentTime,
-            reqItem.equipment,
-            student.AshokaId,
-            studentEmail,
-            student.name,
-            dueDate,
-          ]
-        );
+        await prisma.log.create({
+          data: {
+            timestamp: currentTime,
+            equipmentID: reqItem.equipment.equipmentID,
+            studentID: student.AshokaId,
+            dueOn: dueDate,
+            status: "pending",
+            isTeamIssue: true,
+          },
+        });
       }
     }
 
     // Mark sports requests as issued
-    await db.query(
-      `UPDATE SportsRequests
-       SET issued = TRUE
-       WHERE studentEmail = ?
-         AND studentName = ?
-         AND equipment IN (${placeholders})
-         AND (issued IS NULL OR issued = FALSE)`,
-      [studentEmail, student.name, ...selectedEquipments]
-    );
+    await prisma.sportsRequest.updateMany({
+      where: {
+        studentEmail: studentEmail,
+        equipment: { name: { in: selectedEquipments } },
+        status: "pending",
+      },
+      data: { status: "issued" },
+    });
 
     // Send team borrow confirmation email
     const equipmentCounts = {};
     requests.forEach((reqItem) => {
-      equipmentCounts[reqItem.equipment] = reqItem.quantity;
+      equipmentCounts[reqItem.equipment.name] = reqItem.quantity;
     });
 
     const issueDate = moment().tz("Asia/Kolkata").format("MMMM D, YYYY");
@@ -2004,8 +956,7 @@ app.post("/issue_team_equipment", requireStudent, async (req, res) => {
       .add(7, "days")
       .format("MMMM D, YYYY");
 
-    // Determine team name and sport type from equipment
-    const teamName = "Sports Team"; // You may want to add this to the request
+    const teamName = "Sports Team";
     const sportType = selectedEquipments.join(", ");
 
     await sendTeamBorrowEmail(
@@ -2036,6 +987,8 @@ app.post("/issue_team_equipment", requireStudent, async (req, res) => {
   }
 });
 
+// ================= RETURN LOGIN =================
+
 app.get("/return_login", (req, res) => {
   res.render("return_login", {
     activePage: "landing",
@@ -2043,32 +996,32 @@ app.get("/return_login", (req, res) => {
   });
 });
 
-app.post("/return_login", (req, res) => {
+app.post("/return_login", async (req, res) => {
   const ashokaId = req.body.qrString?.trim();
+  try {
+    const student = await prisma.student.findUnique({
+      where: { studentID: ashokaId },
+      select: { studentID: true, studentName: true, studentEmail: true },
+    });
 
-  db.query(
-    "SELECT studentID, studentName, studentEmail FROM Students WHERE studentID = ?",
-    [ashokaId],
-    (err, results) => {
-      if (err) {
-        console.error("Database error:", err);
-        return res.status(500).send("Database error");
-      }
-      if (results.length === 0) {
-        return res.status(404).send("Student not found");
-      }
-
-      const studentData = {
-        AshokaId: results[0].studentID,
-        name: results[0].studentName,
-        email: results[0].studentEmail
-      };
-
-      req.session.student = studentData;
-      res.redirect("/landing");
+    if (!student) {
+      return res.status(404).send("Student not found");
     }
-  );
+
+    req.session.student = {
+      AshokaId: student.studentID,
+      name: student.studentName,
+      email: student.studentEmail,
+    };
+
+    res.redirect("/landing");
+  } catch (err) {
+    console.error("Database error:", err);
+    return res.status(500).send("Database error");
+  }
 });
+
+// ================= LANDING =================
 
 app.get("/landing", (req, res) => {
   if (!req.session.student) {
@@ -2084,76 +1037,81 @@ app.get("/landing", (req, res) => {
 app.post("/landing", async (req, res) => {
   const ashokaId = String(req.body.qrString).trim();
 
-  // Fetch student from database
-  db.query(
-    "SELECT studentID, studentName, studentEmail FROM Students WHERE studentID = ?",
-    [ashokaId],
-    (err, results) => {
-      if (err) {
-        console.error("Database error:", err);
-        return res.status(500).send("Database error");
-      }
-      if (results.length === 0) {
-        return res.status(404).send("Student not found");
-      }
+  try {
+    // Fetch student from database
+    const student = await prisma.student.findUnique({
+      where: { studentID: ashokaId },
+      select: { studentID: true, studentName: true, studentEmail: true },
+    });
 
-      const studentData = {
-        AshokaId: results[0].studentID,
-        name: results[0].studentName,
-        email: results[0].studentEmail
-      };
-
-      req.session.student = studentData;
-
-      db.query(
-        `SELECT
-          logID,
-          studentID,
-          studentName,
-          equipmentBorrowed as equipment,
-          timestamp as outTime,
-          dueOn,
-          pending,
-          returned,
-          returnedTimestamp as inTime
-        FROM Logs
-        WHERE studentID = ? AND pending = TRUE AND returned = FALSE AND isTeamIssue = FALSE`,
-        [ashokaId],
-        (err, results) => {
-          if (err) return res.status(500).send("Database error");
-
-          results.forEach((r) => {
-            r.outTime = moment(r.outTime)
-              .tz("Asia/Kolkata")
-              .format("ddd DD-MM-YYYY HH:mm:ss");
-            r.dueOn = moment(r.dueOn)
-              .tz("Asia/Kolkata")
-              .format("ddd DD-MM-YYYY HH:mm:ss");
-          });
-
-          res.render("landing", {
-            student: studentData,
-            equipment: results,
-            ...viewUser(req),
-          });
-        }
-      );
+    if (!student) {
+      return res.status(404).send("Student not found");
     }
-  );
+
+    const studentData = {
+      AshokaId: student.studentID,
+      name: student.studentName,
+      email: student.studentEmail,
+    };
+
+    req.session.student = studentData;
+
+    // Fetch pending logs for this student
+    const logs = await prisma.log.findMany({
+      where: {
+        studentID: ashokaId,
+        status: "pending",
+        isTeamIssue: false,
+      },
+      include: {
+        student: { select: { studentName: true } },
+        equipment: { select: { name: true } },
+      },
+    });
+
+    const results = logs.map((l) => ({
+      logID: l.logID,
+      studentID: l.studentID,
+      studentName: l.student.studentName,
+      equipment: l.equipment.name,
+      outTime: moment(l.timestamp)
+        .tz("Asia/Kolkata")
+        .format("ddd DD-MM-YYYY HH:mm:ss"),
+      dueOn: moment(l.dueOn)
+        .tz("Asia/Kolkata")
+        .format("ddd DD-MM-YYYY HH:mm:ss"),
+      status: l.status,
+      inTime: l.returnedTimestamp,
+    }));
+
+    res.render("landing", {
+      student: studentData,
+      equipment: results,
+      ...viewUser(req),
+    });
+  } catch (err) {
+    console.error("Database error:", err);
+    return res.status(500).send("Database error");
+  }
 });
 
 // Return equipment rows including inUseQuantity so clients can filter
-app.get("/getequipment", (req, res) => {
-  db.query("SELECT equipment, inUseQuantity FROM Equipment", (err, rows) => {
-    if (err) {
-      console.error("Database error fetching equipment:", err);
-      return res.status(500).json([]);
-    }
+app.get("/getequipment", async (req, res) => {
+  try {
+    const rows = await prisma.equipment.findMany({
+      select: { name: true, inUseQuantity: true },
+    });
 
-    // rows is an array of { equipment, inUseQuantity }
-    res.json(rows);
-  });
+    res.json(
+      rows.map((r) => ({ equipment: r.name, inUseQuantity: r.inUseQuantity }))
+    );
+  } catch (err) {
+    console.error("Database error fetching equipment:", err);
+    return res.status(500).json([]);
+  }
 });
+
+// ================= RETURN MANY =================
 
 app.post("/returnMany", async (req, res) => {
   if (!req.session.student) {
@@ -2162,107 +1120,89 @@ app.post("/returnMany", async (req, res) => {
 
   const { returns } = req.body;
   const studentId = req.session.student.AshokaId;
-  const returnTime = moment().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
+  const returnTime = new Date();
 
   if (!returns || returns.length === 0) {
     return res.json({ success: false, error: "No items selected" });
   }
 
-  const connection = await pool.getConnection();
-
   try {
-    await connection.beginTransaction();
-
-    // Track only DAMAGED items for inventory changes
     const damagedUpdates = {};
     const returnedItems = {};
 
-    for (const returnItem of returns) {
-      const { logID, equipment, damaged } = returnItem;
+    await prisma.$transaction(async (tx) => {
+      for (const returnItem of returns) {
+        const { logID, equipment, damaged } = returnItem;
 
-      // Ensure log is valid and pending
-      const [logRows] = await connection.query(
-        `SELECT logID, isTeamIssue FROM Logs
-          WHERE logID = ?
-            AND studentID = ?
-            AND pending = TRUE
-            AND returned = FALSE`,
-        [logID, studentId]
-      );
-      if (logRows[0].isTeamIssue) {
-        await connection.rollback();
-        return res.json({
-          success: false,
-          error: "Team-issued equipment cannot be returned via this route",
+        // Ensure log is valid and pending
+        const logEntry = await tx.log.findFirst({
+          where: {
+            logID: logID,
+            studentID: studentId,
+            status: "pending",
+          },
         });
-      }
-      if (logRows.length === 0) {
-        await connection.rollback();
-        return res.json({
-          success: false,
-          error: `Log entry ${logID} not found or already returned`,
-        });
-      }
 
-      // Cancel any scheduled overdue timeout for this item
-      cancelOverdueTimeout(logID);
-
-      // Mark log as returned
-      await connection.query(
-        `UPDATE Logs
-         SET pending = FALSE,
-             returned = TRUE,
-             returnedTimestamp = ?,
-             returnedByID = NULL,
-             returnedByEmail = NULL,
-             damaged = ?
-         WHERE logID = ?`,
-        [returnTime, damaged ? "Yes" : "No", logID]
-      );
-
-      // Only damaged items affect inventory counts
-      if (damaged) {
-        damagedUpdates[equipment] = (damagedUpdates[equipment] || 0) + 1;
-      }
-
-      // Track for email
-      returnedItems[equipment] = (returnedItems[equipment] || 0) + 1;
-    }
-
-    // Reduce usable stock for damaged items
-    const damagedInventoryPromises = Object.keys(damagedUpdates).map(
-      async (equipment) => {
-        const qty = damagedUpdates[equipment];
-
-        const [result] = await connection.query(
-          `UPDATE Equipment
-           SET inUseQuantity = inUseQuantity - ?,
-               damagedQuantity = damagedQuantity + ?
-           WHERE equipment = ?`,
-          [qty, qty, equipment]
-        );
-
-        if (result.affectedRows === 0) {
-          throw new Error(
-            `Equipment "${equipment}" not found during damaged update`
-          );
+        if (!logEntry) {
+          throw new Error(`Log entry ${logID} not found or already returned`);
         }
-      }
-    );
 
-    await Promise.all(damagedInventoryPromises);
-    await connection.commit();
+        if (logEntry.isTeamIssue) {
+          throw new Error("Team-issued equipment cannot be returned via this route");
+        }
+
+        // Cancel any scheduled overdue timeout for this item
+        cancelOverdueTimeout(logID);
+
+        // Mark log as returned
+        await tx.log.update({
+          where: { logID: logID },
+          data: {
+            status: "returned",
+            returnedTimestamp: returnTime,
+            returnedByID: null,
+            damaged: damaged ? true : false,
+          },
+        });
+
+        // Only damaged items affect inventory counts
+        if (damaged) {
+          damagedUpdates[equipment] = (damagedUpdates[equipment] || 0) + 1;
+        }
+
+        // Track for email
+        returnedItems[equipment] = (returnedItems[equipment] || 0) + 1;
+      }
+
+      // Reduce usable stock for damaged items
+      for (const [equipmentName, qty] of Object.entries(damagedUpdates)) {
+        const equip = await tx.equipment.findUnique({
+          where: { name: equipmentName },
+        });
+
+        if (!equip) {
+          throw new Error(`Equipment "${equipmentName}" not found during damaged update`);
+        }
+
+        await tx.equipment.update({
+          where: { name: equipmentName },
+          data: {
+            inUseQuantity: { decrement: qty },
+            damagedQuantity: { increment: qty },
+          },
+        });
+      }
+    });
 
     // Send return confirmation email (non-blocking)
     try {
-      const emailResults = await db.query(
-        "SELECT studentEmail, studentName FROM Students WHERE studentID = ?",
-        [studentId]
-      );
+      const studentRecord = await prisma.student.findUnique({
+        where: { studentID: studentId },
+        select: { studentEmail: true, studentName: true },
+      });
 
-      if (emailResults.length > 0) {
-        const { studentEmail, studentName } = emailResults[0];
-        sendReturnEmail(studentEmail, studentName, returnedItems).catch(
+      if (studentRecord) {
+        sendReturnEmail(studentRecord.studentEmail, studentRecord.studentName, returnedItems).catch(
           () => {}
         );
       }
@@ -2270,23 +1210,22 @@ app.post("/returnMany", async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    await connection.rollback();
     console.error("Error returning equipment:", err);
     res.json({
       success: false,
       error: "Failed to return equipment: " + err.message,
     });
-  } finally {
-    connection.release();
   }
 });
 
-app.post("/sports_request", (req, res) => {
+// ================= SPORTS REQUEST =================
+
+app.post("/sports_request", async (req, res) => {
   const {
     studentEmail,
     studentName,
     team,
-    equipment,
+    equipment: equipmentName,
     quantity,
     startDate,
     endDate,
@@ -2297,7 +1236,7 @@ app.post("/sports_request", (req, res) => {
     !studentEmail ||
     !studentName ||
     !team ||
-    !equipment ||
+    !equipmentName ||
     !quantity ||
     !endDate
   ) {
@@ -2314,58 +1253,53 @@ app.post("/sports_request", (req, res) => {
     });
   }
 
-  const query = `
-    INSERT INTO SportsRequests
-    (studentEmail, studentName,team, equipment, quantity, startDate, endDate)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `;
+  try {
+    // Resolve equipment name to ID
+    const equip = await prisma.equipment.findUnique({
+      where: { name: equipmentName },
+      select: { equipmentID: true },
+    });
 
-  db.query(
-    query,
-    [studentEmail, studentName, team, equipment, quantity, startDate, endDate],
-    (err, result) => {
-      if (err) {
-        console.error("Error inserting sports request:", err);
-        return res.status(500).json({
-          success: false,
-          error: err.message,
-        });
-      }
-
-      // After inserting the sports request, update Equipment counts:
-      // subtract approved quantity from inUseQuantity and add to reservedQuantity
-      const updQuery = `
-        UPDATE Equipment
-        SET inUseQuantity = GREATEST(inUseQuantity - ?, 0),
-            reservedQuantity = reservedQuantity + ?
-        WHERE equipment = ?
-      `;
-
-      db.query(updQuery, [quantity, quantity, equipment], (updErr, updRes) => {
-        if (updErr) {
-          console.error(
-            "Error updating Equipment after sports request:",
-            updErr
-          );
-          return res.status(500).json({
-            success: false,
-            error:
-              "Request saved but failed to update inventory: " + updErr.message,
-            requestId: result.insertId,
-          });
-        }
-
-        return res.status(201).json({
-          success: true,
-          message: "Sports request submitted successfully",
-          requestId: result.insertId,
-        });
-      });
+    if (!equip) {
+      return res.status(404).json({ success: false, message: "Equipment not found." });
     }
-  );
+
+    // Create sports request
+    const request = await prisma.sportsRequest.create({
+      data: {
+        studentEmail,
+        team,
+        equipmentID: equip.equipmentID,
+        quantity: Number(quantity),
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        status: "pending",
+      },
+    });
+
+    // Update Equipment counts
+    await prisma.equipment.update({
+      where: { equipmentID: equip.equipmentID },
+      data: {
+        inUseQuantity: { decrement: Math.min(Number(quantity), (await prisma.equipment.findUnique({ where: { equipmentID: equip.equipmentID } })).inUseQuantity) },
+        reservedQuantity: { increment: Number(quantity) },
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Sports request submitted successfully",
+      requestId: request.requestID,
+    });
+  } catch (err) {
+    console.error("Error inserting sports request:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.post("/update_inventory", (req, res) => {
+// ================= INVENTORY MANAGEMENT =================
+
+app.post("/update_inventory", async (req, res) => {
   const inventory = req.body.inventory;
 
   for (const item of inventory) {
@@ -2385,105 +1319,66 @@ app.post("/update_inventory", (req, res) => {
     item.totalQuantity = reservedQuantity + damagedQuantity + inUseQuantity;
   }
 
-  let completed = 0;
+  try {
+    for (const item of inventory) {
+      if (item.originalEquipment && item.originalEquipment !== item.equipment) {
+        // Handle rename: try update first, then insert if not found
+        const existing = await prisma.equipment.findUnique({
+          where: { name: item.originalEquipment },
+        });
 
-  inventory.forEach((item) => {
-    // If originalEquipment is provided and different, attempt a targeted UPDATE (handles renames)
-    if (item.originalEquipment && item.originalEquipment !== item.equipment) {
-      db.query(
-        `UPDATE Equipment SET
-           equipment = ?,
-           totalQuantity = ?,
-           reservedQuantity = ?,
-           damagedQuantity = ?,
-           inUseQuantity = ?
-         WHERE equipment = ?`,
-        [
-          item.equipment,
-          item.totalQuantity,
-          item.reservedQuantity,
-          item.damagedQuantity,
-          item.inUseQuantity,
-          item.originalEquipment,
-        ],
-        (err, result) => {
-          if (err) {
-            console.error("Update error:", err);
-            return res.status(500).json({ error: "Database update failed." });
-          }
-
-          // If no rows were affected, fall back to insert (new equipment)
-          if (result.affectedRows === 0) {
-            db.query(
-              `INSERT INTO Equipment (equipment, totalQuantity, reservedQuantity, damagedQuantity, inUseQuantity)
-               VALUES (?, ?, ?, ?, ?)`,
-              [
-                item.equipment,
-                item.totalQuantity,
-                item.reservedQuantity,
-                item.damagedQuantity,
-                item.inUseQuantity,
-              ],
-              (insErr) => {
-                if (insErr) {
-                  console.error("Insert fallback error:", insErr);
-                  return res
-                    .status(500)
-                    .json({ error: "Database insert failed." });
-                }
-
-                completed++;
-                if (completed === inventory.length) {
-                  return res.json({
-                    message: "Inventory updated successfully",
-                  });
-                }
-              }
-            );
-            return;
-          }
-
-          completed++;
-          if (completed === inventory.length) {
-            return res.json({ message: "Inventory updated successfully" });
-          }
+        if (existing) {
+          await prisma.equipment.update({
+            where: { name: item.originalEquipment },
+            data: {
+              name: item.equipment,
+              totalQuantity: item.totalQuantity,
+              reservedQuantity: item.reservedQuantity,
+              damagedQuantity: item.damagedQuantity,
+              inUseQuantity: item.inUseQuantity,
+            },
+          });
+        } else {
+          await prisma.equipment.create({
+            data: {
+              name: item.equipment,
+              totalQuantity: item.totalQuantity,
+              reservedQuantity: item.reservedQuantity,
+              damagedQuantity: item.damagedQuantity,
+              inUseQuantity: item.inUseQuantity,
+            },
+          });
         }
-      );
-    } else {
-      // No rename: insert or update by unique key
-      db.query(
-        `INSERT INTO Equipment (equipment, totalQuantity, reservedQuantity, damagedQuantity, inUseQuantity)
-         VALUES (?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE
-           totalQuantity = VALUES(totalQuantity),
-           reservedQuantity = VALUES(reservedQuantity),
-           damagedQuantity = VALUES(damagedQuantity),
-           inUseQuantity = VALUES(inUseQuantity)`,
-        [
-          item.equipment,
-          item.totalQuantity,
-          item.reservedQuantity,
-          item.damagedQuantity,
-          item.inUseQuantity,
-        ],
-        (err) => {
-          if (err) {
-            console.error(err);
-            return res.status(500).json({ error: "Database update failed." });
-          }
-
-          completed++;
-          if (completed === inventory.length) {
-            return res.json({ message: "Inventory updated successfully" });
-          }
-        }
-      );
+      } else {
+        // Upsert by name
+        await prisma.equipment.upsert({
+          where: { name: item.equipment },
+          update: {
+            totalQuantity: item.totalQuantity,
+            reservedQuantity: item.reservedQuantity,
+            damagedQuantity: item.damagedQuantity,
+            inUseQuantity: item.inUseQuantity,
+          },
+          create: {
+            name: item.equipment,
+            totalQuantity: item.totalQuantity,
+            reservedQuantity: item.reservedQuantity,
+            damagedQuantity: item.damagedQuantity,
+            inUseQuantity: item.inUseQuantity,
+          },
+        });
+      }
     }
-  });
+
+    return res.json({ message: "Inventory updated successfully" });
+  } catch (err) {
+    console.error("Inventory update error:", err);
+    return res.status(500).json({ error: "Database update failed." });
+  }
 });
 
 // Delete inventory item by equipment name
-app.post("/delete_inventory", (req, res) => {
+app.post("/delete_inventory", async (req, res) => {
   const equipment = req.body.equipment;
 
   if (!equipment || equipment.trim() === "") {
@@ -2493,54 +1388,60 @@ app.post("/delete_inventory", (req, res) => {
     });
   }
 
-  // Instead of deleting, zero out quantities
-  db.query(
-    `UPDATE Equipment
-     SET totalQuantity = 0,
-         reservedQuantity = 0,
-         damagedQuantity = 0,
-         inUseQuantity = 0
-     WHERE equipment = ?`,
-    [equipment],
-    (err, result) => {
-      if (err) {
-        console.error("Error zeroing equipment:", err);
-        return res.status(500).json({
-          success: false,
-          error: err.message,
-        });
-      }
+  try {
+    // Instead of deleting, zero out quantities
+    const result = await prisma.equipment.updateMany({
+      where: { name: equipment },
+      data: {
+        totalQuantity: 0,
+        reservedQuantity: 0,
+        damagedQuantity: 0,
+        inUseQuantity: 0,
+      },
+    });
 
-      if (result.affectedRows === 0) {
-        return res.status(404).json({
-          success: false,
-          error: "Equipment not found",
-        });
-      }
-
-      return res.json({
-        success: true,
-        message: "Equipment inventory cleared successfully",
+    if (result.count === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Equipment not found",
       });
     }
-  );
+
+    return res.json({
+      success: true,
+      message: "Equipment inventory cleared successfully",
+    });
+  } catch (err) {
+    console.error("Error zeroing equipment:", err);
+    return res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
 });
-app.get("/get_offences", ensureAuthenticated, (req, res) => {
-  db.query(
-    `
-    SELECT studentName, studentEmail, offences
-    FROM Students
-    WHERE offences > 0
-    ORDER BY offences DESC
-    `,
-    (err, results) => {
-      if (err) {
-        console.error("Error fetching offences:", err);
-        return res.status(500).json({ error: "Database error" });
-      }
-      res.json(results);
-    }
-  );
+
+// ================= OFFENCES =================
+
+app.get("/get_offences", ensureAuthenticated, async (req, res) => {
+  try {
+    const results = await prisma.$queryRaw`
+      SELECT s.studentName, s.studentEmail, COUNT(l.logID) as offences
+      FROM Students s
+      JOIN Logs l ON s.studentID = l.studentID
+      WHERE l.status IN ('overdue', 'overdue_returned')
+      GROUP BY s.studentID
+      ORDER BY offences DESC
+    `;
+
+    res.json(results.map(r => ({
+      studentName: r.studentName,
+      studentEmail: r.studentEmail,
+      offences: Number(r.offences),
+    })));
+  } catch (err) {
+    console.error("Error fetching offences:", err);
+    return res.status(500).json({ error: "Database error" });
+  }
 });
 
 app.get("/team_landing", (req, res) => {
@@ -2550,15 +1451,14 @@ app.get("/team_landing", (req, res) => {
   });
 });
 
-app.get("/admin", ensureAdmin, (req, res) => {
-  db.query("SELECT * FROM Equipment", (err, results) => {
-    if (err) {
-      console.error("Database error:", err);
-      return res.status(500).send("Database error");
-    }
+// ================= ADMIN =================
+
+app.get("/admin", ensureAdmin, async (req, res) => {
+  try {
+    const results = await prisma.equipment.findMany();
 
     const equipmentData = results.map((row) => ({
-      equipment: row.equipment,
+      equipment: row.name,
       totalQuantity: row.totalQuantity,
       reservedQuantity: row.reservedQuantity,
       damagedQuantity: row.damagedQuantity,
@@ -2572,103 +1472,116 @@ app.get("/admin", ensureAdmin, (req, res) => {
       ...viewUser(req),
       equipment: equipmentData,
     });
-  });
+  } catch (err) {
+    console.error("Database error:", err);
+    return res.status(500).send("Database error");
+  }
 });
 
-// API endpoint for statistics data
+// ================= STATISTICS API =================
+
 app.get("/api/statistics", ensureAdmin, async (req, res) => {
   try {
     const period = req.query.period || "today";
     
     // Determine date filter based on period
-    let dateFilter = "";
-    let returnDateFilter = "";
     const now = moment().tz("Asia/Kolkata");
+    let dateFrom = null;
     
     switch (period) {
       case "today":
-        dateFilter = `AND DATE(timestamp) = '${now.format("YYYY-MM-DD")}'`;
-        returnDateFilter = `AND DATE(returnedTimestamp) = '${now.format("YYYY-MM-DD")}'`;
+        dateFrom = now.clone().startOf("day").toDate();
         break;
       case "week":
-        const weekStart = now.clone().startOf("week").format("YYYY-MM-DD");
-        dateFilter = `AND DATE(timestamp) >= '${weekStart}'`;
-        returnDateFilter = `AND DATE(returnedTimestamp) >= '${weekStart}'`;
+        dateFrom = now.clone().startOf("week").toDate();
         break;
       case "month":
-        const monthStart = now.clone().startOf("month").format("YYYY-MM-DD");
-        dateFilter = `AND DATE(timestamp) >= '${monthStart}'`;
-        returnDateFilter = `AND DATE(returnedTimestamp) >= '${monthStart}'`;
+        dateFrom = now.clone().startOf("month").toDate();
         break;
       case "all":
       default:
-        dateFilter = "";
-        returnDateFilter = "";
+        dateFrom = null;
         break;
     }
 
     console.log(`[Statistics] Fetching data for period: ${period}`);
 
+    const dateCondition = dateFrom ? { gte: dateFrom } : undefined;
+
     // Total checkouts
-    const totalCheckouts = await db.query(
-      `SELECT COUNT(*) as count FROM Logs WHERE 1=1 ${dateFilter}`
-    );
+    const totalCheckouts = await prisma.log.count({
+      where: dateFrom ? { timestamp: dateCondition } : {},
+    });
 
     // Total returns
-    const totalReturns = await db.query(
-      `SELECT COUNT(*) as count FROM Logs WHERE returned = TRUE ${returnDateFilter}`
-    );
+    const totalReturns = await prisma.log.count({
+      where: {
+        status: { in: ["returned", "overdue_returned"] },
+        ...(dateFrom ? { returnedTimestamp: dateCondition } : {}),
+      },
+    });
 
     // Active users (unique borrowers)
-    const activeUsers = await db.query(
-      `SELECT COUNT(DISTINCT studentID) as count FROM Logs WHERE 1=1 ${dateFilter}`
-    );
+    const activeUsersResult = await prisma.log.findMany({
+      where: dateFrom ? { timestamp: dateCondition } : {},
+      distinct: ["studentID"],
+      select: { studentID: true },
+    });
+    const activeUsers = activeUsersResult.length;
 
     // Pending returns (currently checked out)
-    const pendingReturns = await db.query(
-      `SELECT COUNT(*) as count FROM Logs WHERE pending = TRUE AND returned = FALSE`
-    );
+    const pendingReturns = await prisma.log.count({
+      where: { status: { in: ["pending", "overdue"] } },
+    });
 
     // Most borrowed equipment
-    const mostBorrowed = await db.query(
-      `SELECT equipmentBorrowed as equipment, COUNT(*) as count 
-       FROM Logs 
-       WHERE 1=1 ${dateFilter}
-       GROUP BY equipmentBorrowed 
-       ORDER BY count DESC 
-       LIMIT 10`
-    );
+    const mostBorrowed = await prisma.$queryRaw`
+      SELECT e.name as equipment, COUNT(*) as count 
+      FROM Logs l
+      JOIN Equipment e ON l.equipmentID = e.equipmentID
+      ${dateFrom ? prisma.$queryRaw`WHERE l.timestamp >= ${dateFrom}` : prisma.$queryRaw`WHERE 1=1`}
+      GROUP BY e.equipmentID
+      ORDER BY count DESC 
+      LIMIT 10
+    `;
 
     // Most active borrowers
-    const activeBorrowers = await db.query(
-      `SELECT studentName as name, studentID as ashokaId, COUNT(*) as count 
-       FROM Logs 
-       WHERE 1=1 ${dateFilter}
-       GROUP BY studentID, studentName 
-       ORDER BY count DESC 
-       LIMIT 10`
-    );
+    const activeBorrowers = await prisma.$queryRaw`
+      SELECT s.studentName as name, s.studentID as ashokaId, COUNT(*) as count 
+      FROM Logs l
+      JOIN Students s ON l.studentID = s.studentID
+      ${dateFrom ? prisma.$queryRaw`WHERE l.timestamp >= ${dateFrom}` : prisma.$queryRaw`WHERE 1=1`}
+      GROUP BY s.studentID
+      ORDER BY count DESC 
+      LIMIT 10
+    `;
 
     // Equipment currently checked out with availability
-    const equipmentOut = await db.query(
-      `SELECT 
-        e.equipment,
-        e.totalQuantity as total,
-        e.inUseQuantity as inUse,
-        (e.totalQuantity - e.reservedQuantity - e.damagedQuantity - e.inUseQuantity) as available
-       FROM Equipment e
-       WHERE e.inUseQuantity > 0
-       ORDER BY e.inUseQuantity DESC`
-    );
+    const equipmentOut = await prisma.equipment.findMany({
+      where: { inUseQuantity: { gt: 0 } },
+      select: {
+        name: true,
+        totalQuantity: true,
+        inUseQuantity: true,
+        reservedQuantity: true,
+        damagedQuantity: true,
+      },
+      orderBy: { inUseQuantity: "desc" },
+    });
 
     const response = {
-      totalCheckouts: totalCheckouts[0]?.count || 0,
-      totalReturns: totalReturns[0]?.count || 0,
-      activeUsers: activeUsers[0]?.count || 0,
-      pendingReturns: pendingReturns[0]?.count || 0,
-      mostBorrowed: mostBorrowed || [],
-      activeBorrowers: activeBorrowers || [],
-      equipmentOut: equipmentOut || [],
+      totalCheckouts: totalCheckouts || 0,
+      totalReturns: totalReturns || 0,
+      activeUsers: activeUsers || 0,
+      pendingReturns: pendingReturns || 0,
+      mostBorrowed: (mostBorrowed || []).map(r => ({ equipment: r.equipment, count: Number(r.count) })),
+      activeBorrowers: (activeBorrowers || []).map(r => ({ name: r.name, ashokaId: r.ashokaId, count: Number(r.count) })),
+      equipmentOut: equipmentOut.map(e => ({
+        equipment: e.name,
+        total: e.totalQuantity,
+        inUse: e.inUseQuantity,
+        available: e.totalQuantity - e.reservedQuantity - e.damagedQuantity - e.inUseQuantity,
+      })),
     };
 
     console.log(`[Statistics] Response:`, JSON.stringify(response, null, 2));
@@ -2689,6 +1602,25 @@ app.get("/statistics", ensureAdmin, (req, res) => {
     ...viewUser(req),
   });
 });
+
+// ================= WEBHOOK =================
+
+app.post("/api/check-overdue", async (req, res) => {
+  const apiKey = req.headers["x-api-key"];
+  if (apiKey !== process.env.WEBHOOK_API_KEY) {
+    return res.status(403).json({ error: "Invalid API key" });
+  }
+
+  try {
+    const result = await checkAndMarkOverdueItems();
+    res.json(result);
+  } catch (error) {
+    console.error("Webhook overdue check error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ================= SUCCESS PAGES =================
 
 // Store success data in session for later retrieval
 app.post("/store-success-data", (req, res) => {

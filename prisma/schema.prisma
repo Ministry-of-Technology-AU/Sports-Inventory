@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────
+
+enum LogStatus {
+  pending
+  returned
+  overdue
+  overdue_returned
+}
+
+enum RequestStatus {
+  pending
+  issued
+  returned
+}
+
+// ─── Models ───────────────────────────────────────────────
+
+model Equipment {
+  equipmentID      Int    @id @default(autoincrement())
+  name             String @unique @db.VarChar(100)
+  totalQuantity    Int
+  reservedQuantity Int    @default(0)
+  damagedQuantity  Int    @default(0)
+  inUseQuantity    Int    @default(0)
+
+  logs             Log[]
+  sportsRequests   SportsRequest[]
+  equipmentLogs    EquipmentLog[]
+
+  @@map("Equipment")
+}
+
+model Student {
+  studentID            String  @id @db.VarChar(50)
+  studentName          String  @db.VarChar(100)
+  studentEmail         String  @unique @db.VarChar(100)
+  sportsTeamAuthorised Boolean @default(false)
+
+  logs                 Log[]          @relation("StudentLogs")
+  returnedLogs         Log[]          @relation("ReturnedByLogs")
+  sportsRequests       SportsRequest[]
+
+  @@map("Students")
+}
+
+model SportsRequest {
+  requestID    Int           @id @default(autoincrement())
+  studentEmail String        @db.VarChar(100)
+  team         String?       @db.VarChar(20)
+  equipmentID  Int
+  quantity     Int
+  startDate    DateTime      @db.Date
+  endDate      DateTime      @db.Date
+  approvedOn   DateTime      @default(now())
+  status       RequestStatus @default(pending)
+
+  student      Student       @relation(fields: [studentEmail], references: [studentEmail])
+  equipment    Equipment     @relation(fields: [equipmentID], references: [equipmentID])
+
+  @@map("SportsRequests")
+}
+
+model Log {
+  logID             Int       @id @default(autoincrement())
+  timestamp         DateTime  @default(now())
+  equipmentID       Int
+  studentID         String    @db.VarChar(50)
+  dueOn             DateTime
+  status            LogStatus @default(pending)
+  overdueEmailSent  Boolean   @default(false)
+  returnedTimestamp  DateTime?
+  returnedByID      String?   @db.VarChar(50)
+  damaged           Boolean   @default(false)
+  isTeamIssue       Boolean   @default(false)
+
+  equipment         Equipment @relation(fields: [equipmentID], references: [equipmentID])
+  student           Student   @relation("StudentLogs", fields: [studentID], references: [studentID])
+  returnedBy        Student?  @relation("ReturnedByLogs", fields: [returnedByID], references: [studentID], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([studentID, status])
+  @@index([equipmentID, status])
+  @@map("Logs")
+}
+
+model EquipmentLog {
+  logID                  Int      @id @default(autoincrement())
+  equipmentID            Int
+  timestamp              DateTime @default(now())
+  totalStockAsOfTimestamp Int
+  updateDone             String?  @db.VarChar(255)
+
+  equipment              Equipment @relation(fields: [equipmentID], references: [equipmentID])
+
+  @@map("EquipmentLogs")
+}
