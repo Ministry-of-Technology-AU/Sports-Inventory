@@ -12,6 +12,7 @@ import { logToFile } from "./utils/logger.js";
 import { sendBorrowEmail, sendReturnEmail, sendOverdueEmail, sendTeamBorrowEmail, sendTeamReturnEmail, sendTeamOverdueEmail } from "./utils/email.js";
 import { OVERDUE_THRESHOLD_HOURS, OVERDUE_THRESHOLD_MINUTES, scheduleOverdueTimeout, cancelOverdueTimeout, processOverdueItem, rescheduleAllOverdueTimeouts, checkAndMarkOverdueItems, scheduleOverdueForRecentIssues } from "./services/overdue.js";
 import prisma from "./prisma.js";
+import { Prisma } from "@prisma/client";
 
 console.log("Running");
 const app = express();
@@ -127,8 +128,7 @@ app.use((req, res, next) => {
   // Student pages (/issue, /landing, etc.) require student session (QR code login)
   const studentPaths = ["/issue", "/landing", "/team_landing"];
   if (studentPaths.includes(req.path)) {
-    // Allow if user has student session OR is OAuth authenticated
-    if (req.session.student || req.isAuthenticated()) {
+    if (req.session.student) {
       return next();
     }
     // Redirect to appropriate login page
@@ -190,8 +190,8 @@ function ensureAdmin(req, res, next) {
   }
   // Handle API requests with JSON response
   if (req.path.startsWith('/api/')) {
-    return res.status(403).json({ 
-      error: "Forbidden: Admin access only" 
+    return res.status(403).json({
+      error: "Forbidden: Admin access only"
     });
   }
   // Handle page requests with HTML error page
@@ -310,7 +310,7 @@ app.post("/issue_login", async (req, res) => {
       email: student.studentEmail,
     };
 
-    console.log("Student Data:", studentData);
+    // console.log("Student Data:", studentData);
     req.session.student = studentData;
     res.redirect("/issue");
   } catch (err) {
@@ -711,7 +711,7 @@ app.post("/return_team_equipment", requireStudent, async (req, res) => {
 // ================= REGULAR ISSUE =================
 
 // Regular issue endpoint - GET
-app.get("/issue", async (req, res) => {
+app.get("/issue", requireStudent, async (req, res) => {
   try {
     const equipmentList = await prisma.equipment.findMany({
       select: {
@@ -1023,10 +1023,7 @@ app.post("/return_login", async (req, res) => {
 
 // ================= LANDING =================
 
-app.get("/landing", (req, res) => {
-  if (!req.session.student) {
-    return res.redirect("/return_login");
-  }
+app.get("/landing", requireStudent, (req, res) => {
   res.render("landing_redirect", {
     ashokaId: req.session.student.AshokaId,
     activePage: "landing",
@@ -1203,10 +1200,10 @@ app.post("/returnMany", async (req, res) => {
 
       if (studentRecord) {
         sendReturnEmail(studentRecord.studentEmail, studentRecord.studentName, returnedItems).catch(
-          () => {}
+          () => { }
         );
       }
-    } catch (_) {}
+    } catch (_) { }
 
     res.json({ success: true });
   } catch (err) {
@@ -1444,7 +1441,7 @@ app.get("/get_offences", ensureAuthenticated, async (req, res) => {
   }
 });
 
-app.get("/team_landing", (req, res) => {
+app.get("/team_landing", requireStudent, (req, res) => {
   res.render("team_landing", {
     activePage: "team-landing",
     ...viewUser(req),
@@ -1465,7 +1462,7 @@ app.get("/admin", ensureAdmin, async (req, res) => {
       inUseQuantity: row.inUseQuantity,
     }));
 
-    console.log("Equipment Data:", equipmentData);
+    // console.log("Equipment Data:", equipmentData);
 
     res.render("admin", {
       activePage: "admin",
@@ -1483,11 +1480,11 @@ app.get("/admin", ensureAdmin, async (req, res) => {
 app.get("/api/statistics", ensureAdmin, async (req, res) => {
   try {
     const period = req.query.period || "today";
-    
+
     // Determine date filter based on period
     const now = moment().tz("Asia/Kolkata");
     let dateFrom = null;
-    
+
     switch (period) {
       case "today":
         dateFrom = now.clone().startOf("day").toDate();
@@ -1504,7 +1501,7 @@ app.get("/api/statistics", ensureAdmin, async (req, res) => {
         break;
     }
 
-    console.log(`[Statistics] Fetching data for period: ${period}`);
+    // console.log(`[Statistics] Fetching data for period: ${period}`);
 
     const dateCondition = dateFrom ? { gte: dateFrom } : undefined;
 
@@ -1535,26 +1532,26 @@ app.get("/api/statistics", ensureAdmin, async (req, res) => {
     });
 
     // Most borrowed equipment
-    const mostBorrowed = await prisma.$queryRaw`
+    const mostBorrowed = await prisma.$queryRaw(Prisma.sql`
       SELECT e.name as equipment, COUNT(*) as count 
       FROM Logs l
       JOIN Equipment e ON l.equipmentID = e.equipmentID
-      ${dateFrom ? prisma.$queryRaw`WHERE l.timestamp >= ${dateFrom}` : prisma.$queryRaw`WHERE 1=1`}
-      GROUP BY e.equipmentID
+      ${dateFrom ? Prisma.sql`WHERE l.timestamp >= ${dateFrom}` : Prisma.empty}
+      GROUP BY e.name
       ORDER BY count DESC 
       LIMIT 10
-    `;
+    `);
 
     // Most active borrowers
-    const activeBorrowers = await prisma.$queryRaw`
+    const activeBorrowers = await prisma.$queryRaw(Prisma.sql`
       SELECT s.studentName as name, s.studentID as ashokaId, COUNT(*) as count 
       FROM Logs l
       JOIN Students s ON l.studentID = s.studentID
-      ${dateFrom ? prisma.$queryRaw`WHERE l.timestamp >= ${dateFrom}` : prisma.$queryRaw`WHERE 1=1`}
-      GROUP BY s.studentID
+      ${dateFrom ? Prisma.sql`WHERE l.timestamp >= ${dateFrom}` : Prisma.empty}
+      GROUP BY s.studentID, s.studentName
       ORDER BY count DESC 
       LIMIT 10
-    `;
+    `);
 
     // Equipment currently checked out with availability
     const equipmentOut = await prisma.equipment.findMany({
@@ -1584,14 +1581,14 @@ app.get("/api/statistics", ensureAdmin, async (req, res) => {
       })),
     };
 
-    console.log(`[Statistics] Response:`, JSON.stringify(response, null, 2));
+    // console.log(`[Statistics] Response:`, JSON.stringify(response, null, 2));
     res.json(response);
   } catch (error) {
     console.error("Error fetching statistics:", error);
     console.error("Stack trace:", error.stack);
-    res.status(500).json({ 
+    res.status(500).json({
       error: "Failed to fetch statistics",
-      message: error.message 
+      message: error.message
     });
   }
 });
@@ -1726,13 +1723,13 @@ app.post("/success", (req, res) => {
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
-  
+
   // Format threshold for display
-  const thresholdDisplay = OVERDUE_THRESHOLD_MINUTES < 60 
-    ? `${OVERDUE_THRESHOLD_MINUTES} minutes` 
+  const thresholdDisplay = OVERDUE_THRESHOLD_MINUTES < 60
+    ? `${OVERDUE_THRESHOLD_MINUTES} minutes`
     : `${OVERDUE_THRESHOLD_HOURS} hours (${OVERDUE_THRESHOLD_MINUTES} minutes)`;
   console.log(`⏰ Overdue threshold: ${thresholdDisplay}`);
-  
+
   // Reschedule overdue timeouts for pending items on startup
   setTimeout(async () => {
     logToFile("🚀 Server started - rescheduling overdue timeouts...");

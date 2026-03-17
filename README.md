@@ -1,4 +1,4 @@
-# Sports Inventory
+# AU Sports Inventory
 
 <h2>View #1: Guard side | while issuing equipment </h2>
 As shown below, the guard can scan the student's ashokaID and then log the student into the system. <br>
@@ -38,181 +38,87 @@ As shown below, the offences done by students can be shown in the offences secti
 As shown below, the equipment that has been returned marked as damaged can be viewed in the damaged equipment section of the admin page<br><br>
 <img width="1710" alt="Screenshot 2025-02-19 at 12 30 44 AM" src="./images/Screenshot 2026-02-07 122621.png" /> <br>  <br>
 
-<h2>Setup and dependencies: </2><br>
-<h5>How to setup: </h5>
-1. Configure mySQL locally <br>
-2. Set credentials in .env according to the mySQL credentials <br>
-3. Open the terminal and type mysql -u root -p <br>
-4. Type in your password <br>
-5. CREATE DATABASE SportsInventory; <br>
-6. USE DATABASE SportsInventory; <br>
-7. Create 5 tables using the table creation commands. <br>
-8. Your mySQL setup is ready! <br>
-9. Clone the repo. <br>
-10. Run node src/App.js in your terminal. <br>
-11. The system should run for you locally and all logs should be visible in your mySQL database. <br>
-12. To view the logs, login to mySQL through the terminal as done in 3. and 4. and enter 'SELECT * FROM Logs;'<br>
+## Setup and Dependencies
 
-<h6>Ejs (Express javascript): Frontend <br>
-Node.js: Backend <br>
-MySQL: Database</h6>
-1. mysql  Ver 14.14 <br>
-2. node v16.20.2 <br>
-3. "ejs": "^3.1.10" <br>
-4. "fuse": "^0.12.1" <br>
-5. "fuse.js": "^7.1.0" <br>
-6. "tailwind": "^4.0.0" <br>
+### Prerequisites
+- [Node.js](https://nodejs.org/) (v16+)
+- [MySQL](https://www.mysql.com/) database
 
-<h2>Packages: Table structure</h2> <br>
-CREATE TABLE Equipment (
-equipment VARCHAR(100) UNIQUE PRIMARY KEY,
-totalQuantity INT NOT NULL,
-reservedQuantity INT NOT NULL,
-damagedQuantity INT NOT NULL,
-inUseQuantity INT NOT NULL
-);
+### Installation
 
-CREATE TABLE Students (
-studentID VARCHAR(50) PRIMARY KEY,
-studentName VARCHAR(100) NOT NULL,
-studentEmail VARCHAR(100) UNIQUE NOT NULL,
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/Ministry-of-Technology-AU/Sports-Inventory.git
+   cd AU-Sports-Inventory
+   ```
 
-    borrowedNotOutstanding INT DEFAULT 0,
-    borrowedOutstanding INT DEFAULT 0,
-    offences INT DEFAULT 0,
-    sportsTeamAuthorised BOOLEAN DEFAULT FALSE
+2. **Configure Environment Variables**
+   Create a `.env` file in the root directory and add the following:
+   ```env
+   # Database Configuration
+   DATABASE_URL="mysql://USER:PASSWORD@HOST:PORT/DATABASE"
+   
+   # Server Configuration
+   PORT=3000
+   SECRET_KEY="your_session_secret"
+   
+   # Google OAuth Configuration
+   GOOGLE_CLIENT_ID="your_client_id"
+   GOOGLE_CLIENT_SECRET="your_client_secret"
+   GOOGLE_CALLBACK_URL="http://localhost:3000/auth/google/callback"
+   ```
 
-);
+3. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-CREATE TABLE SportsRequests (
-studentEmail VARCHAR(100),
-studentName VARCHAR(100),
-team VARCHAR(20) DEFAULT NULL,
-equipment VARCHAR(100),
-quantity INT NOT NULL,
-startDate DATE NOT NULL,
-endDate DATE NOT NULL,
-approvedOn TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-issued BOOLEAN DEFAULT FALSE,
-returned BOOLEAN DEFAULT FALSE,
+4. **Initialize Database**
+   Instead of running manual SQL scripts, use Prisma to sync the schema:
+   ```bash
+   npx prisma push
+   npx prisma generate
+   ```
 
-    CONSTRAINT fk_student_email FOREIGN KEY (studentEmail)
-        REFERENCES Students(studentEmail),
+5. **Start the application**
+   ```bash
+   # Development mode with nodemon
+   npm run dev 
+   
+   # Or directly
+   node src/app.js
+   ```
 
-    CONSTRAINT fk_equipment FOREIGN KEY (equipment)
-        REFERENCES Equipment(equipment)
+---
 
-);
+## Functional Overview
 
--- Create Logs table
-CREATE TABLE Logs (
-logID INT AUTO_INCREMENT PRIMARY KEY,
-timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-equipmentBorrowed VARCHAR(100) NOT NULL,
-studentID VARCHAR(50) NOT NULL,
-studentEmail VARCHAR(100) NOT NULL,
-studentName VARCHAR(100) NOT NULL,
-dueOn DATETIME NOT NULL,
-pending BOOLEAN NOT NULL DEFAULT TRUE,
-returned BOOLEAN NOT NULL DEFAULT FALSE,
-overdue BOOLEAN NOT NULL DEFAULT FALSE,
-overdueEmailSent BOOLEAN NOT NULL DEFAULT FALSE,
-returnedTimestamp DATETIME,
-returnedByID VARCHAR(50) NULL,
-returnedByEmail VARCHAR(100) NULL,
-damaged ENUM('Yes', 'No') DEFAULT 'No',
-isTeamIssue BOOLEAN NOT NULL DEFAULT FALSE,
+The AU Sports Inventory system manages the issuing and returning of sports equipment with specialized views for guards, students, and admins.
 
-    CONSTRAINT fk_logs_equipment FOREIGN KEY (equipmentBorrowed)
-        REFERENCES Equipment(equipment),
+### 1. Guard Workflow
+- **Issue Equipment**: Scan student's Ashoka ID QR to log them in. Select equipment and quantities to issue. The system tracks availability in real-time.
+- **Return Equipment**: Scan ID to see outstanding items. Mark items as returned (optionally as damaged).
 
-    CONSTRAINT fk_logs_student_id FOREIGN KEY (studentID)
-        REFERENCES Students(studentID),
+### 2. Student Portal
+- **QR Login**: Students access their personalized issue/return dashboard by scanning a QR code at the mailroom.
+- **Sports Teams**: Members of authorized sports teams can access dedicated portals to issue/return team-specific equipment based on approved requests.
 
-    CONSTRAINT fk_logs_student_email FOREIGN KEY (studentEmail)
-        REFERENCES Students(studentEmail),
+### 3. Admin Dashboard
+- **Inventory Management**: Real-time dashboard to add new equipment, update stock levels, and monitor damaged items.
+- **Statistics & Analytics**: Visual data on equipment usage trends and inventory health.
+- **Offence Tracking**: Automated tracking of students with overdue equipment and history of offences.
+- **Request Authorization**: Create and manage sports team authorizations for specific time periods.
 
-    CONSTRAINT fk_logs_returned_by_id FOREIGN KEY (returnedByID)
-        REFERENCES Students(studentID)
-        ON DELETE SET NULL
-        ON UPDATE CASCADE,
+### 4. Technical Stack
+- **Backend**: Node.js, Express.js
+- **Database**: MySQL with **Prisma ORM**
+- **Frontend**: EJS (Embedded JavaScript Templates), Vanilla CSS
+- **Auth**: Google OAuth 2.0 (Admin), QR-based Sessions (Students)
 
-    CONSTRAINT fk_logs_returned_by_email FOREIGN KEY (returnedByEmail)
-        REFERENCES Students(studentEmail)
-        ON DELETE SET NULL
-        ON UPDATE CASCADE
+---
 
-);
-
--- Create EquipmentLogs table
-CREATE TABLE EquipmentLogs (
-logID INT AUTO_INCREMENT PRIMARY KEY,
-itemName VARCHAR(100) NOT NULL,
-timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-totalStockAsOfTimestamp INT NOT NULL,
-updateDone VARCHAR(255),
-
-    CONSTRAINT fk_equipment_logs_item FOREIGN KEY (itemName)
-        REFERENCES Equipment(equipment)
-
-);
-
-<!-- DATA INSERTION FOR TESTING -->
-
-INSERT INTO Equipment
-(equipment, totalQuantity, reservedQuantity, damagedQuantity, inUseQuantity)
-VALUES
-('Basketball', 50, 10, 2, 15),
-('Football', 40, 5, 1, 12),
-('Badminton Racket', 30, 8, 3, 10),
-('Hockey Stick', 25, 6, 2, 9),
-('Cricket Bat', 35, 12, 4, 14);
-
-INSERT INTO students (studentID, studentName, studentEmail)
-VALUES
-("1020251823", "Atharvajeet Singh", "atharvajeet.singh_ug2025@ashoka.edu.in")
-("1020251110", "Aditya Kanodia", "aditya.kanodia_ug2025@ashoka.edu.in")
-
-<br>
-
-# Instructions
-
-To get started with running the code in the server, do the following:
-
-## Deployment
-
-Clone the project
-
+## Deployment with PM2
+To keep the application running in production:
 ```bash
-  git clone https://github.com/Ministry-of-Technology-AU/Sports-Inventory.git
-```
-
-Go to the project directory
-
-```bash
-  cd sports-inventory
-```
-
-Install dependencies
-
-```bash
-  npm install
-```
-
-and
-
-```bash
-  npm install -g nodemon # or using yarn: yarn global add nodemon
-```
-
-Start the app
-
-```bash
-  nodemon src/app.js
-```
-
-## To manage the app using PM2
-
-```bash
-  pm2 start npm --name "sports-inventory" -- start
+pm2 start npm --name "sports-inventory" -- start
 ```

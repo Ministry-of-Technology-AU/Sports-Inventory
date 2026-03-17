@@ -27,7 +27,7 @@
       <div class="actions-menu">
         <h1>Actions</h1>
         <li class="actions-buttons-list">
-          <span
+          <span class="active"
             ><i class="fa-solid fa-basketball"></i>
             <button type="button" class="update-inventory-btn">
               Update Inventory
@@ -47,8 +47,7 @@
           </span>
           <span
             ><i class="fa-solid fa-square-poll-vertical"></i>
-            <button type="button"><a href="/statistics">View Statistics</a></button> 
-            
+            <a href="/statistics">View Statistics</a> 
           </span>
           <span
             ><i class="fa-solid fa-chain-broken"></i
@@ -60,7 +59,7 @@
       </div>
       <div class="content-box">
         <div class="update-inventory-section">
-          <table border="1" cellpadding="5">
+          <table>
             <thead>
               <tr>
                 <th>Equipment</th>
@@ -96,7 +95,7 @@
           <button class="save-inventory-btn">Save Changes</button>
         </div>
         <div class="damaged-equipment-section" style="display: none">
-          <table border="1" cellpadding="5">
+          <table>
             <thead>
               <tr>
                 <th>Equipment</th>
@@ -169,6 +168,7 @@
     document
       .querySelector(".update-inventory-btn")
       .addEventListener("click", function () {
+        setActive(this);
         const section_1 = document.querySelector(".sports-requests");
         section_1.style.display = "none";
         const section_2 = document.querySelector(".damaged-equipment-section");
@@ -182,6 +182,7 @@
     document
       .querySelector(".sports-requests-btn")
       .addEventListener("click", function () {
+        setActive(this);
         const section_1 = document.querySelector(".update-inventory-section");
         section_1.style.display = "none";
         const section_2 = document.querySelector(".damaged-equipment-section");
@@ -194,6 +195,7 @@
     document
       .querySelector(".damaged-equipment-btn")
       .addEventListener("click", function () {
+        setActive(this);
         const section_1 = document.querySelector(".update-inventory-section");
         section_1.style.display = "none";
         const section_2 = document.querySelector(".sports-requests");
@@ -206,6 +208,7 @@
     document
       .querySelector(".view-offences-btn")
       .addEventListener("click", function () {
+        setActive(this);
         const section_1 = document.querySelector(".update-inventory-section");
         section_1.style.display = "none";
         const section_2 = document.querySelector(".sports-requests");
@@ -217,6 +220,13 @@
 
         loadOffences();
       });
+
+    function setActive(el) {
+      document.querySelectorAll(".actions-buttons-list span").forEach((span) => {
+        span.classList.remove("active");
+      });
+      el.closest("span").classList.add("active");
+    }
   </script>
 
   <!--update inventory script-->

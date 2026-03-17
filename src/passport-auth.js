@@ -61,12 +61,12 @@ passport.use(
 
 // Serialize and deserialize user information for Passport.js
 passport.serializeUser((user, done) => {
-  console.log("Serializing user:", user.email); // Debug log
+  // console.log("Serializing user:", user.email); // Debug log
   done(null, user);
 });
 
 passport.deserializeUser((user, done) => {
-  console.log("Deserializing user:", user.email); // Debug log
+  // console.log("Deserializing user:", user.email); // Debug log
   done(null, user);
 });
 

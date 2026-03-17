@@ -124,168 +124,185 @@
     .equipment-grid {
       display: flex;
       flex-direction: column;
-      gap: 25px;
-      padding: 25px;
-      /* background: #f8f9fa; */
+      gap: 30px;
+      padding: 0 10px;
       border-radius: 8px;
     }
 
     .paired-section {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-      gap: 35px;
-      margin-bottom: 40px;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 25px;
+      margin-bottom: 30px;
     }
 
     .single-section {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 20px;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 25px;
     }
 
     /* Paired card container */
     .paired-card {
       background: white;
-      border-radius: 10px;
-      padding: 25px;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+      border-radius: 12px;
+      padding: 20px 15px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
       transition: transform 0.2s, box-shadow 0.2s;
-      /* border: 2px solid var(--secondary-color); */
-      border: 1px rgba(0, 0, 0, 0.271) solid;
+      border: 1px solid #e0e0e0;
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 15px;
     }
 
     .paired-card:hover {
       transform: translateY(-3px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
     }
 
     .paired-header {
       text-align: center;
-      font-size: 18px;
-      font-weight: 700;
+      font-size: 16px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
       color: var(--secondary-color);
       padding-bottom: 12px;
-      border-bottom: 2px solid #e9ecef;
+      border-bottom: 2px solid #f1f3f5;
     }
 
     .item-in-pair {
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 15px;
-      /* background: #f8f9fa; */
-      border-radius: 8px;
+      padding: 10px 0;
     }
 
     .item-in-pair img {
-      width: 90px;
-      height: 90px;
-      object-fit: cover;
-      border-radius: 8px;
+      width: 100px;
+      height: 100px;
+      object-fit: contain;
       margin-bottom: 12px;
     }
 
     .item-in-pair label {
       font-size: 15px;
-      font-weight: 600;
+      font-weight: 700;
       color: #333;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
       text-align: center;
     }
 
     .item-in-pair .availability {
       font-size: 14px;
-      color: #28a745;
-      font-weight: 600;
-      margin-bottom: 12px;
+      color: #2b8a3e;
+      font-weight: 700;
+      margin-bottom: 15px;
     }
 
     /* Single card (non-paired) */
     .card {
       background: white;
-      border-radius: 10px;
-      padding: 28px;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+      border-radius: 12px;
+      padding: 25px 15px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
       transition: transform 0.2s, box-shadow 0.2s;
       display: flex;
       flex-direction: column;
       align-items: center;
-      border: 1px rgba(0, 0, 0, 0.271) solid;
+      border: 1px solid #e0e0e0;
     }
 
     .card:hover {
       transform: translateY(-3px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
     }
 
     .card img {
-      width: 90px;
-      height: 90px;
-      object-fit: cover;
-      border-radius: 8px;
-      margin-bottom: 18px;
+      width: 110px;
+      height: 110px;
+      object-fit: contain;
+      margin-bottom: 15px;
     }
 
     .card label {
-      font-size: 18px;
-      font-weight: 600;
+      font-size: 16px;
+      font-weight: 700;
       color: #333;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
       text-align: center;
     }
 
     .card .availability {
-      font-size: 15px;
-      color: #28a745;
-      font-weight: 600;
+      font-size: 14px;
+      color: #2b8a3e;
+      font-weight: 700;
       margin-bottom: 18px;
     }
 
+    /* Quantity Selector Unit */
     .something {
       display: flex;
       align-items: center;
-      gap: 15px;
+      justify-content: center;
+      height: 38px;
     }
 
     .something button {
-      width: 30px;
-      height: 30px;
-      border: 2px solid var(--secondary-color);
-      background: white;
+      width: 36px;
+      height: 100%;
+      border: 2px solid #e0e0e0;
+      background: #f8f9fa;
       color: var(--secondary-color);
-      font-size: 28px;
-      font-weight: bold;
-      border-radius: 6px;
+      font-size: 20px;
+      font-weight: 800;
       cursor: pointer;
       transition: all 0.2s;
       display: flex;
       align-items: center;
       justify-content: center;
-      line-height: 1;
       padding: 0;
+    }
+
+    .something button.decrement {
+      border-radius: 8px 0 0 8px;
+      border-right: none;
+    }
+
+    .something button.increment {
+      border-radius: 0 8px 8px 0;
+      border-left: none;
     }
 
     .something button:hover:not(:disabled) {
       background: var(--secondary-color);
       color: white;
+      border-color: var(--secondary-color);
     }
 
     .something button:disabled {
-      opacity: 0.4;
+      opacity: 0.3;
       cursor: not-allowed;
     }
 
     .something input {
-      width: 65px;
-      height: 40px;
+      width: 50px;
+      height: 100%;
       text-align: center;
       font-size: 16px;
-      font-weight: 600;
-      border: 2px solid #dee2e6;
-      border-radius: 6px;
+      font-weight: 700;
+      border: 2px solid #e0e0e0;
+      border-radius: 0;
+      background: white;
+      appearance: none;
+      -moz-appearance: textfield;
+      pointer-events: none; /* Only allow button interaction */
+    }
+
+    .something input::-webkit-outer-spin-button,
+    .something input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
     }
 
     .card[style*="opacity"],
