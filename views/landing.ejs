@@ -97,6 +97,7 @@
                   type="checkbox"
                   data-logid="<%= item.logID %>"
                   data-equipment="<%= item.equipment %>"
+                  data-base-equipment="<%= item.baseEquipment %>"
                 />
                 <span class="checkmark"></span>
               </label>
@@ -208,6 +209,7 @@
               return {
                 logID: logID,
                 equipment: cb.dataset.equipment,
+                baseEquipment: cb.dataset.baseEquipment,
                 damaged: isDamaged,
               };
             });

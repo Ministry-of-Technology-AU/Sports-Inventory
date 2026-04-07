@@ -305,6 +305,44 @@
       margin: 0;
     }
 
+    .cycle-id-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+      align-items: center;
+    }
+
+    .cycle-id-input {
+      width: 100%;
+      max-width: 150px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #333;
+      text-align: center;
+      outline: none;
+    }
+
+    .cycle-id-input:focus {
+      border-color: var(--secondary-color);
+    }
+
+    .cycle-hint {
+      font-size: 12px;
+      color: #6c757d;
+      text-align: center;
+      margin: 0;
+      min-height: 16px;
+    }
+
+    .cycle-hint.error {
+      color: #c0392b;
+      font-weight: 700;
+    }
+
     .card[style*="opacity"],
     .paired-card[style*="opacity"] {
       opacity: 0.5 !important;
@@ -398,12 +436,26 @@
                     <p class="availability">
                       <%= availableItems[item.name] || 0 %>
                     </p>
-                    <div class="something">
-                      <button type="button" class="decrement">-</button>
-                      <input type="number" name="quantity[<%= item.name %>]" value="0" min="0" step="1"
-                        data-name="<%= item.name %>" />
-                      <button type="button" class="increment">+</button>
-                    </div>
+                    <% if (item.name === "Cycle") { %>
+                      <div class="cycle-id-wrap">
+                        <input
+                          class="cycle-id-input"
+                          type="text"
+                          name="cycleID[Cycle]"
+                          data-name="Cycle"
+                          data-available="<%= availableItems[item.name] || 0 %>"
+                          placeholder="e.g. 5, 12, 18"
+                        />
+                        <p class="cycle-hint" id="cycleHint">Enter cycle numbers separated by commas</p>
+                      </div>
+                    <% } else { %>
+                      <div class="something">
+                        <button type="button" class="decrement">-</button>
+                        <input type="number" name="quantity[<%= item.name %>]" value="0" min="0" step="1"
+                          data-name="<%= item.name %>" />
+                        <button type="button" class="increment">+</button>
+                      </div>
+                    <% } %>
                   </div>
                   <% }) %>
               </div>
@@ -417,6 +469,7 @@
         const selectedList = document.getElementById('selectedList');
         const selectedSummary = document.getElementById('selectedSummary');
         const inputs = document.querySelectorAll('input[type=number]');
+        const cycleInput = document.querySelector('.cycle-id-input');
 
         selectedList.innerHTML = '';
         let hasSelection = false;
@@ -433,6 +486,21 @@
           }
         });
 
+        if (cycleInput && cycleInput.value.trim()) {
+          const ids = cycleInput.value
+            .split(',')
+            .map((id) => id.trim())
+            .filter((id) => id.length > 0);
+
+          ids.forEach((id) => {
+            hasSelection = true;
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'selected-item';
+            itemDiv.innerHTML = `<strong>1x</strong> Cycle #${id}`;
+            selectedList.appendChild(itemDiv);
+          });
+        }
+
         if (hasSelection) {
           selectedSummary.classList.add('active');
         } else {
@@ -444,6 +512,7 @@
       document.querySelectorAll(".card, .paired-card").forEach((card) => {
         const availabilityElements = card.querySelectorAll(".availability");
         const inputs = card.querySelectorAll("input[type=number]");
+        const cycleInput = card.querySelector(".cycle-id-input");
         const incBtns = card.querySelectorAll(".increment");
         const decBtns = card.querySelectorAll(".decrement");
 
@@ -456,6 +525,14 @@
 
         if (allUnavailable && card.classList.contains('paired-card')) {
           card.style.opacity = "0.6";
+        }
+
+        if (allUnavailable && card.classList.contains('card')) {
+          card.style.opacity = "0.6";
+        }
+
+        if (cycleInput && allUnavailable) {
+          cycleInput.disabled = true;
         }
 
         // Handle each item (works for both single and paired)
@@ -489,6 +566,66 @@
 
           input.addEventListener('change', updateSelectedSummary);
         });
+
+        if (cycleInput) {
+          const cycleHint = document.getElementById('cycleHint');
+
+          cycleInput.addEventListener('input', () => {
+            const rawIDs = cycleInput.value
+              .split(',')
+              .map((id) => id.trim())
+              .filter((id) => id.length > 0);
+
+            const invalidIDs = rawIDs.filter((id) => !/^\d+$/.test(id) || Number(id) <= 0);
+            const duplicateIDs = rawIDs.filter((id, index) => rawIDs.indexOf(id) !== index);
+            const available = parseInt(cycleInput.dataset.available || '0', 10);
+
+            cycleHint.classList.remove('error');
+            if (invalidIDs.length > 0) {
+              cycleHint.textContent = `Invalid cycle IDs: ${[...new Set(invalidIDs)].join(', ')}`;
+              cycleHint.classList.add('error');
+            } else if (duplicateIDs.length > 0) {
+              cycleHint.textContent = `Duplicate cycle IDs: ${[...new Set(duplicateIDs)].join(', ')}`;
+              cycleHint.classList.add('error');
+            } else if (rawIDs.length > available) {
+              cycleHint.textContent = `Only ${available} cycle(s) available right now`;
+              cycleHint.classList.add('error');
+            } else {
+              cycleHint.textContent = 'Enter cycle numbers separated by commas';
+            }
+
+            updateSelectedSummary();
+          });
+        }
+      });
+
+      document.getElementById('issueForm').addEventListener('submit', (event) => {
+        const cycleInput = document.querySelector('.cycle-id-input');
+        if (!cycleInput || cycleInput.disabled) {
+          return;
+        }
+
+        const rawIDs = cycleInput.value
+          .split(',')
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0);
+        const selectedNumberInputs = Array.from(document.querySelectorAll('input[type=number]'))
+          .some((input) => (parseInt(input.value, 10) || 0) > 0);
+
+        if (!selectedNumberInputs && rawIDs.length === 0) {
+          event.preventDefault();
+          alert('Please select at least one item to issue.');
+          return;
+        }
+
+        const invalidIDs = rawIDs.filter((id) => !/^\d+$/.test(id) || Number(id) <= 0);
+        const duplicateIDs = rawIDs.filter((id, index) => rawIDs.indexOf(id) !== index);
+        const available = parseInt(cycleInput.dataset.available || '0', 10);
+
+        if (invalidIDs.length > 0 || duplicateIDs.length > 0 || rawIDs.length > available) {
+          event.preventDefault();
+          alert('Please fix cycle ID input before submitting.');
+        }
       });
     </script>
 </body>

@@ -746,11 +746,23 @@ app.get("/issue", requireStudent, async (req, res) => {
 app.post("/issue", async (req, res) => {
   const currentTime = new Date();
   const quantity = req.body.quantity || {};
+  const cyclePayload = req.body.cycleID || {};
+
+  const cycleRaw = cyclePayload.Cycle;
+  const cycleIDs = (Array.isArray(cycleRaw) ? cycleRaw : [cycleRaw])
+    .filter(Boolean)
+    .flatMap((value) => String(value).split(","))
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
 
   // Get list of equipment to issue (where quantity > 0)
   const equipmentList = Object.keys(quantity).filter(
     (item) => Number(quantity[item]) > 0
   );
+
+  if (cycleIDs.length > 0 && !equipmentList.includes("Cycle")) {
+    equipmentList.push("Cycle");
+  }
 
   if (equipmentList.length === 0) {
     return res.redirect("/landing");
@@ -791,8 +803,56 @@ app.post("/issue", async (req, res) => {
       equipmentIDMap[row.name] = row.equipmentID;
     });
 
+    if (cycleIDs.length > 0) {
+      const invalidCycleIDs = cycleIDs.filter(
+        (value) => !/^\d+$/.test(value) || Number(value) <= 0
+      );
+      if (invalidCycleIDs.length > 0) {
+        return res
+          .status(400)
+          .send(`Invalid cycle IDs: ${invalidCycleIDs.join(", ")}`);
+      }
+
+      const duplicateCycleIDs = cycleIDs.filter(
+        (id, index) => cycleIDs.indexOf(id) !== index
+      );
+      if (duplicateCycleIDs.length > 0) {
+        const uniqueDuplicates = [...new Set(duplicateCycleIDs)];
+        return res
+          .status(400)
+          .send(`Duplicate cycle IDs entered: ${uniqueDuplicates.join(", ")}`);
+      }
+
+      const cycleEquipmentID = equipmentIDMap.Cycle;
+      if (!cycleEquipmentID) {
+        return res.status(400).send("Cycle equipment not configured");
+      }
+
+      const pendingCycles = await prisma.log.findMany({
+        where: {
+          equipmentID: cycleEquipmentID,
+          status: "pending",
+          cycleID: { in: cycleIDs },
+        },
+        select: { cycleID: true },
+      });
+
+      if (pendingCycles.length > 0) {
+        const busyCycleIDs = [
+          ...new Set(pendingCycles.map((entry) => entry.cycleID).filter(Boolean)),
+        ];
+        return res
+          .status(400)
+          .send(
+            `Cycle IDs already borrowed and pending return: ${busyCycleIDs.join(
+              ", "
+            )}`
+          );
+      }
+    }
+
     for (let item of equipmentList) {
-      const requested = Number(quantity[item]);
+      const requested = item === "Cycle" ? cycleIDs.length : Number(quantity[item]);
       const available = availabilityMap[item] || 0;
 
       if (requested > available) {
@@ -812,34 +872,69 @@ app.post("/issue", async (req, res) => {
 
     const logCreates = [];
     for (const item of equipmentList) {
-      const qtyToIssue = Number(quantity[item]);
-      for (let i = 0; i < qtyToIssue; i++) {
-        logCreates.push(
-          prisma.log.create({
-            data: {
-              timestamp: currentTime,
-              equipmentID: equipmentIDMap[item],
-              studentID: req.session.student.AshokaId,
-              dueOn: dueDate,
-              status: "pending",
-            },
-          })
-        );
+      if (item === "Cycle") {
+        for (const cycleID of cycleIDs) {
+          logCreates.push(
+            prisma.log.create({
+              data: {
+                timestamp: currentTime,
+                equipmentID: equipmentIDMap[item],
+                studentID: req.session.student.AshokaId,
+                dueOn: dueDate,
+                status: "pending",
+                cycleID: String(cycleID),
+              },
+            })
+          );
+        }
+      } else {
+        const qtyToIssue = Number(quantity[item]);
+        for (let i = 0; i < qtyToIssue; i++) {
+          logCreates.push(
+            prisma.log.create({
+              data: {
+                timestamp: currentTime,
+                equipmentID: equipmentIDMap[item],
+                studentID: req.session.student.AshokaId,
+                dueOn: dueDate,
+                status: "pending",
+              },
+            })
+          );
+        }
       }
     }
 
     await Promise.all(logCreates);
 
     // Build issued equipment list
-    const issuedEquipment = equipmentList.map((eq) => ({
-      equipment: eq,
-      outNum: Number(quantity[eq]),
-    }));
+    const issuedEquipment = [];
+    equipmentList.forEach((eq) => {
+      if (eq === "Cycle") {
+        cycleIDs.forEach((cycleID) => {
+          issuedEquipment.push({
+            equipment: `Cycle #${cycleID}`,
+            outNum: 1,
+          });
+        });
+      } else {
+        issuedEquipment.push({
+          equipment: eq,
+          outNum: Number(quantity[eq]),
+        });
+      }
+    });
 
     // Prepare equipment counts for email
     const equipmentCounts = {};
     equipmentList.forEach((eq) => {
-      equipmentCounts[eq] = Number(quantity[eq]);
+      if (eq === "Cycle") {
+        cycleIDs.forEach((cycleID) => {
+          equipmentCounts[`Cycle #${cycleID}`] = 1;
+        });
+      } else {
+        equipmentCounts[eq] = Number(quantity[eq]);
+      }
     });
 
     // Send borrow confirmation email (non-blocking)
@@ -1070,7 +1165,12 @@ app.post("/landing", async (req, res) => {
       logID: l.logID,
       studentID: l.studentID,
       studentName: l.student.studentName,
-      equipment: l.equipment.name,
+      equipment:
+        l.equipment.name === "Cycle" && l.cycleID
+          ? `Cycle #${l.cycleID}`
+          : l.equipment.name,
+      baseEquipment: l.equipment.name,
+      cycleID: l.cycleID,
       outTime: moment(l.timestamp)
         .tz("Asia/Kolkata")
         .format("ddd DD-MM-YYYY HH:mm:ss"),
@@ -1129,7 +1229,8 @@ app.post("/returnMany", async (req, res) => {
 
     await prisma.$transaction(async (tx) => {
       for (const returnItem of returns) {
-        const { logID, equipment, damaged } = returnItem;
+        const { logID, equipment, baseEquipment, damaged } = returnItem;
+        const inventoryEquipment = baseEquipment || equipment;
 
         // Ensure log is valid and pending
         const logEntry = await tx.log.findFirst({
@@ -1164,7 +1265,8 @@ app.post("/returnMany", async (req, res) => {
 
         // Only damaged items affect inventory counts
         if (damaged) {
-          damagedUpdates[equipment] = (damagedUpdates[equipment] || 0) + 1;
+          damagedUpdates[inventoryEquipment] =
+            (damagedUpdates[inventoryEquipment] || 0) + 1;
         }
 
         // Track for email

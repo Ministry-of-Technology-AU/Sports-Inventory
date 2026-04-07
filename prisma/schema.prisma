@@ -81,6 +81,7 @@ model Log {
   returnedByID      String?   @db.VarChar(50)
   damaged           Boolean   @default(false)
   isTeamIssue       Boolean   @default(false)
+  cycleID           String?   @db.VarChar(50)
 
   equipment         Equipment @relation(fields: [equipmentID], references: [equipmentID])
   student           Student   @relation("StudentLogs", fields: [studentID], references: [studentID])
