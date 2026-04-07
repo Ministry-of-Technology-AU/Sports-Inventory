@@ -6,6 +6,9 @@
   "scripts": {
     "start": "node app.js"
   },
+  "engines": {
+    "node": ">=22.15.0"
+  },
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "dotenv": "^16.3.1",
