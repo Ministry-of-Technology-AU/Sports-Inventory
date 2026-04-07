@@ -4,9 +4,11 @@ This guide is for setting up the database for the first time on a fresh local en
 
 ## 1. Prerequisites
 
-- Node.js installed
+- Node.js v22.15.0 or newer installed
 - MySQL running locally
 - Database created: `SportsInventory`
+
+If `npm install` prints an `EBADENGINE` warning, your local Node version is too old for this project. Upgrade to Node 22.15.0+ before continuing.
 
 ## 2. Configure environment variables
 

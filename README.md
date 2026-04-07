@@ -41,8 +41,10 @@ As shown below, the equipment that has been returned marked as damaged can be vi
 ## Setup and Dependencies
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (v16+)
+- [Node.js](https://nodejs.org/) (v22.15.0+)
 - [MySQL](https://www.mysql.com/) database
+
+This repository declares `node >=22.15.0` in `package.json`, so older versions will trigger an `EBADENGINE` warning during `npm install`.
 
 ### Installation
 
