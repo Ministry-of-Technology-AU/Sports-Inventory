@@ -14,7 +14,7 @@ CREATE TABLE Students (
     studentName VARCHAR(100) NOT NULL,
     studentEmail VARCHAR(100) UNIQUE NOT NULL,
     sportsTeamAuthorised BOOLEAN DEFAULT FALSE
-);
+);my
 
 CREATE TABLE SportsRequests (
     requestID INT AUTO_INCREMENT PRIMARY KEY,

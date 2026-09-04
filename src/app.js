@@ -13,6 +13,7 @@ import { sendBorrowEmail, sendReturnEmail, sendOverdueEmail, sendTeamBorrowEmail
 import { OVERDUE_THRESHOLD_HOURS, OVERDUE_THRESHOLD_MINUTES, scheduleOverdueTimeout, cancelOverdueTimeout, processOverdueItem, rescheduleAllOverdueTimeouts, checkAndMarkOverdueItems, scheduleOverdueForRecentIssues } from "./services/overdue.js";
 import prisma from "./prisma.js";
 import { Prisma } from "@prisma/client";
+import { processQr } from "./services/qrService.js";
 
 console.log("Running");
 const app = express();
@@ -65,7 +66,7 @@ const sessionStore = new MySQLStoreSession(sessionStoreOptions, pool);
 
 app.use(
   session({
-    name: "mailroom_sid",
+    name: "sports_sid",
     secret: process.env.SECRET_KEY || "your_session_secret",
     store: sessionStore,
     resave: false,
@@ -257,7 +258,7 @@ app.get("/logout", (req, res, next) => {
     if (err) return next(err);
 
     req.session.regenerate(() => {
-      res.clearCookie("mailroom_sid");
+      res.clearCookie("sports_sid");
       res.redirect("/auth/google");
     });
   });
@@ -270,6 +271,7 @@ app.get("/unauthorized", (req, res) => {
 });
 
 const BASE_URL = process.env.BASE_URL;
+
 
 app.get("/", (req, res) => {
   res.render("issue_login", {
@@ -293,50 +295,98 @@ app.get("/issue_login", (req, res) => {
 // ================= STUDENT LOGIN ROUTES =================
 
 app.post("/issue_login", async (req, res) => {
-  const ashokaId = req.body.qrString?.trim();
+
+  const qrString = req.body.qrString?.trim();
+
+  if (!qrString) {
+    return res.status(400).send("Please scan an ID");
+  }
+
   try {
+
+    // STEP 1: Validate QR and get Ashoka ID
+    const processedQr = await processQr(qrString);
+
+    if (!processedQr.isValid) {
+      return res.status(400).send("Invalid ID");
+    }
+
+    // STEP 2: Extract the real Ashoka ID
+    const ashokaId = processedQr.ashokaId;
+
+    // STEP 3: Find student in Sports Inventory database
     const student = await prisma.student.findUnique({
-      where: { studentID: ashokaId },
-      select: { studentID: true, studentName: true, studentEmail: true },
+      where: {
+        studentID: ashokaId
+      },
+      select: {
+        studentID: true,
+        studentName: true,
+        studentEmail: true
+      }
     });
 
     if (!student) {
       return res.status(404).send("Student not found");
     }
 
-    const studentData = {
+    // STEP 4: Create session
+    req.session.student = {
       AshokaId: student.studentID,
       name: student.studentName,
-      email: student.studentEmail,
+      email: student.studentEmail
     };
 
-    // console.log("Student Data:", studentData);
-    req.session.student = studentData;
     res.redirect("/issue");
+
   } catch (err) {
-    console.error("Database error:", err);
+
+    console.error("Issue login error:", err);
+
     return res.status(500).send("Database error");
   }
 });
 
 app.post("/issue_login_sports", async (req, res) => {
-  const ashokaId = req.body.qrString?.trim();
+  const qrString = req.body.qrString?.trim();
+
+  if (!qrString) {
+    return res.status(400).send("Please scan an ID");
+  }
+
   try {
+    // Validate QR and extract the actual Ashoka ID
+    const processedQr = await processQr(qrString);
+
+    if (!processedQr.isValid) {
+      return res.status(400).send("Invalid ID");
+    }
+
+    const ashokaId = processedQr.ashokaId;
+
+    // Find student
     const student = await prisma.student.findUnique({
       where: { studentID: ashokaId },
-      select: { studentID: true, studentName: true, studentEmail: true, sportsTeamAuthorised: true },
+      select: {
+        studentID: true,
+        studentName: true,
+        studentEmail: true,
+        sportsTeamAuthorised: true,
+      },
     });
 
     if (!student) {
       return res.status(404).send("Student not found");
     }
 
+    // Check sports team authorization
     if (!student.sportsTeamAuthorised) {
       return res.render("error", {
         msg: "Unauthorized: You are not authorised as a sports team member.",
       });
     }
 
+    // Create student session
     req.session.student = {
       AshokaId: student.studentID,
       name: student.studentName,
@@ -346,8 +396,9 @@ app.post("/issue_login_sports", async (req, res) => {
     req.session.save(() => {
       res.redirect("/issue_team");
     });
+
   } catch (err) {
-    console.error("Database error:", err);
+    console.error("Sports issue login error:", err);
     return res.status(500).send("Database error");
   }
 });
@@ -509,17 +560,37 @@ app.get("/team_return", async (req, res) => {
 });
 
 app.post("/team_return_login", async (req, res) => {
-  const ashokaId = req.body.qrString?.trim();
+  const qrString = req.body.qrString?.trim();
+
+  if (!qrString) {
+    return res.status(400).send("Please scan an ID");
+  }
+
   try {
+    // Validate QR and extract the actual Ashoka ID
+    const processedQr = await processQr(qrString);
+
+    if (!processedQr.isValid) {
+      return res.status(400).send("Invalid ID");
+    }
+
+    const ashokaId = processedQr.ashokaId;
+
+    // Find student
     const student = await prisma.student.findUnique({
       where: { studentID: ashokaId },
-      select: { studentID: true, studentName: true, studentEmail: true },
+      select: {
+        studentID: true,
+        studentName: true,
+        studentEmail: true,
+      },
     });
 
     if (!student) {
       return res.status(404).send("Student not found");
     }
 
+    // Create student session
     req.session.student = {
       AshokaId: student.studentID,
       name: student.studentName,
@@ -527,12 +598,12 @@ app.post("/team_return_login", async (req, res) => {
     };
 
     res.redirect("/team_return");
+
   } catch (err) {
-    console.error("Database error:", err);
+    console.error("Team return login error:", err);
     return res.status(500).send("Database error");
   }
 });
-
 // ================= TEAM RETURN =================
 app.post("/return_team_equipment", requireStudent, async (req, res) => {
   const equipments =
@@ -997,17 +1068,37 @@ app.get("/return_login", (req, res) => {
 });
 
 app.post("/return_login", async (req, res) => {
-  const ashokaId = req.body.qrString?.trim();
+  const qrString = req.body.qrString?.trim();
+
+  if (!qrString) {
+    return res.status(400).send("Please scan an ID");
+  }
+
   try {
+    // Validate QR and extract the actual Ashoka ID
+    const processedQr = await processQr(qrString);
+
+    if (!processedQr.isValid) {
+      return res.status(400).send("Invalid ID");
+    }
+
+    const ashokaId = processedQr.ashokaId;
+
+    // Find student
     const student = await prisma.student.findUnique({
       where: { studentID: ashokaId },
-      select: { studentID: true, studentName: true, studentEmail: true },
+      select: {
+        studentID: true,
+        studentName: true,
+        studentEmail: true,
+      },
     });
 
     if (!student) {
       return res.status(404).send("Student not found");
     }
 
+    // Create student session
     req.session.student = {
       AshokaId: student.studentID,
       name: student.studentName,
@@ -1015,8 +1106,9 @@ app.post("/return_login", async (req, res) => {
     };
 
     res.redirect("/landing");
+
   } catch (err) {
-    console.error("Database error:", err);
+    console.error("Return login error:", err);
     return res.status(500).send("Database error");
   }
 });
