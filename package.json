@@ -2,9 +2,10 @@
   "name": "sports-inventory",
   "version": "1.0.0",
   "type": "module",
-  "main": "app.js",
+  "main": "src/app.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",

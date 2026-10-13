@@ -3,7 +3,7 @@ import fetch from "node-fetch";
 let authToken = null;
 let refreshToken = null;
 
-const BASE_URL = process.env.BASE_URL;
+const BASE_URL = process.env.ASHOKA_API_BASE_URL;
 
 
 /**
